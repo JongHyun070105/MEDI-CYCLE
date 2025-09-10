@@ -240,7 +240,13 @@ class _MonthlyTab extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: () => _generateReport(context),
         icon: const Icon(Icons.description),
-        label: const Text('의사 상담용 리포트 생성하기'),
+        label: Text(
+          '의사 상담용 리포트 생성하기',
+          style: AppTextStyles.h6.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
@@ -347,18 +353,12 @@ class _WeekdayTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                '평일, 주말 복용률 (%)',
-                style: AppTextStyles.h5.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Icon(Icons.show_chart, color: Colors.red, size: 20),
-            ],
+          Text(
+            '평일, 주말 복용률 (%)',
+            style: AppTextStyles.h5.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: AppSizes.xl),
           SizedBox(

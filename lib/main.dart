@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
-import 'features/medication/presentation/screens/medication_home_screen.dart';
+import 'features/auth/presentation/screens/splash_screen.dart';
 
 void main() {
   runApp(const ProviderScope(child: MediCycleApp()));
@@ -18,7 +18,7 @@ class MediCycleApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: const MedicationHomeScreen(),
+      home: const SplashScreen(),
       navigatorKey: GlobalKey<NavigatorState>(),
     );
   }

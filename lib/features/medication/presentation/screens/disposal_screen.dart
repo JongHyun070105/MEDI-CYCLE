@@ -342,8 +342,6 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
           const SizedBox(height: AppSizes.lg),
 
           // 신청자 정보
-          _buildEditableInputField('이름', _nameController, '이름을 입력하세요'),
-          const SizedBox(height: AppSizes.lg),
           _buildEditableInputField('연락처', _phoneController, '연락처를 입력하세요'),
           const SizedBox(height: AppSizes.lg),
 
@@ -369,7 +367,13 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
                   borderRadius: BorderRadius.circular(AppSizes.radiusLg),
                 ),
               ),
-              child: const Text('수거 신청하기'),
+              child: Text(
+                '수거 신청하기',
+                style: AppTextStyles.h6.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -587,9 +591,7 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
   }
 
   void _submitRequest() {
-    if (_nameController.text.isEmpty ||
-        _phoneController.text.isEmpty ||
-        _selectedDate == null) {
+    if (_phoneController.text.isEmpty || _selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('모든 필드를 입력해주세요'),

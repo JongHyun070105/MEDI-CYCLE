@@ -20,7 +20,13 @@ class RegistrationStepContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.md),
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.only(
+        left: AppSizes.md,
+        right: AppSizes.md,
+        top: AppSizes.md,
+        bottom: AppSizes.xl + 100, // 하단 여백 추가 (FAB 높이 고려)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -9,6 +9,7 @@ import 'disposal_screen.dart';
 import 'medication_box_screen.dart';
 import 'ai_feedback_screen.dart';
 import 'chatbot_screen.dart';
+import '../../../auth/presentation/screens/settings_screen.dart';
 
 class MedicationHomeScreen extends ConsumerStatefulWidget {
   const MedicationHomeScreen({super.key});
@@ -20,6 +21,8 @@ class MedicationHomeScreen extends ConsumerStatefulWidget {
 
 class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
   int _currentIndex = 2;
+  final GlobalKey<_MedicationTabState> _medicationTabKey =
+      GlobalKey<_MedicationTabState>();
 
   @override
   Widget build(BuildContext context) {
@@ -36,17 +39,13 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
               surfaceTintColor: Colors.transparent,
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () {
-                    // TODO: 알림 설정 화면으로 이동
-                  },
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                ),
-                IconButton(
                   icon: const Icon(Icons.settings_outlined),
                   onPressed: () {
-                    // TODO: 설정 화면으로 이동
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
                   },
                   splashColor: Colors.transparent,
                   highlightColor: Colors.transparent,
@@ -56,12 +55,12 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
           : null,
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          _DisposalTab(),
-          _MedicationTab(),
-          _HomeTab(),
-          _PharmacyTab(),
-          _ProfileTab(),
+        children: [
+          const _DisposalTab(),
+          _MedicationTab(key: _medicationTabKey),
+          const _HomeTab(),
+          const _PharmacyTab(),
+          const _ProfileTab(),
         ],
       ),
       bottomNavigationBar: Theme(
@@ -112,14 +111,37 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const ChatbotScreen()),
-          );
+        heroTag: "main_fab",
+        onPressed: () async {
+          if (_currentIndex == 1) {
+            // 약 등록 탭일 때는 약 등록 화면으로 이동
+            final result = await Navigator.push(
+              context,
+             MaterialPageRoute(
+               builder: (context) => MedicationRegistrationScreen(
+                 onMedicationAdded: (medication) {
+                   // 약이 추가될 때마다 리스트에 추가
+                   _medicationTabKey.currentState?.addMedication(medication);
+                 },
+               ),
+             ),
+            );
+            if (result != null && result is Map<String, dynamic>) {
+              _medicationTabKey.currentState?.addMedication(result);
+            }
+          } else {
+            // 다른 탭일 때는 챗봇으로 이동
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const ChatbotScreen()),
+            );
+          }
         },
         backgroundColor: AppColors.primary,
         splashColor: Colors.transparent,
-        child: const Icon(Icons.chat, color: Colors.white),
+        child: Icon(
+          _currentIndex == 1 ? Icons.add : Icons.chat,
+          color: Colors.white,
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -202,8 +224,47 @@ class _HomeTab extends StatelessWidget {
   }
 }
 
-class _MedicationTab extends StatelessWidget {
-  const _MedicationTab();
+class _MedicationTab extends StatefulWidget {
+  const _MedicationTab({super.key});
+
+  @override
+  State<_MedicationTab> createState() => _MedicationTabState();
+}
+
+class _MedicationTabState extends State<_MedicationTab> {
+  // 더미 데이터 - 실제로는 상태 관리에서 가져와야 함
+  final List<Map<String, dynamic>> _registeredMedications = [
+    {
+      'name': '아스피린',
+      'manufacturer': '바이엘',
+      'dosage': '1정',
+      'frequency': '하루 3회',
+      'times': ['08:00', '12:00', '18:00'],
+      'startDate': '2024-01-15',
+      'endDate': '2024-01-22',
+    },
+    {
+      'name': '타이레놀',
+      'manufacturer': '한국얀센',
+      'dosage': '2정',
+      'frequency': '하루 2회',
+      'times': ['09:00', '21:00'],
+      'startDate': '2024-01-16',
+      'endDate': '2024-01-23',
+    },
+  ];
+
+  void addMedication(Map<String, dynamic> medication) {
+    setState(() {
+      _registeredMedications.insert(0, medication);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('약이 추가되었습니다.'),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,102 +276,275 @@ class _MedicationTab extends StatelessWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save, color: AppColors.textPrimary),
-            onPressed: () {
-              // TODO: 임시 저장
-            },
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSizes.md),
-        child: Column(
-          children: [
-            const SizedBox(height: AppSizes.md),
+      body: _registeredMedications.isEmpty
+          ? _buildEmptyState()
+          : _buildMedicationList(),
+    );
+  }
 
-            // 메인 아이콘과 제목
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(40),
-                border: Border.all(color: AppColors.primary, width: 2),
-              ),
-              child: Icon(Icons.medication, size: 40, color: AppColors.primary),
+  Widget _buildEmptyState() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSizes.md),
+      child: Column(
+        children: [
+          const SizedBox(height: AppSizes.md),
+
+          // 메인 아이콘과 제목
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(40),
+              border: Border.all(color: AppColors.primary, width: 2),
             ),
-            const SizedBox(height: AppSizes.md),
+            child: Icon(Icons.medication, size: 40, color: AppColors.primary),
+          ),
+          const SizedBox(height: AppSizes.md),
 
-            Text(
-              '약 등록',
-              style: AppTextStyles.h3.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
+          Text(
+            '약 등록',
+            style: AppTextStyles.h3.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: AppSizes.sm),
+          ),
+          const SizedBox(height: AppSizes.sm),
 
-            Text(
-              '새로운 약을 등록하여\n복용 관리를 시작해보세요',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
+          Text(
+            '새로운 약을 등록하여\n복용 관리를 시작해보세요',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
             ),
-            const SizedBox(height: AppSizes.lg),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSizes.lg),
 
-            // 기능 설명 카드들
-            _buildFeatureCard(
-              icon: Icons.camera_alt,
-              title: '사진으로 등록',
-              description: '처방전이나 약봉지를 촬영하여\n자동으로 약 정보를 입력합니다',
-            ),
-            const SizedBox(height: AppSizes.md),
+          // 기능 설명 카드들
+          _buildFeatureCard(
+            icon: Icons.camera_alt,
+            title: '사진으로 등록',
+            description: '처방전이나 약봉지를 촬영하여\n자동으로 약 정보를 입력합니다',
+          ),
+          const SizedBox(height: AppSizes.md),
 
-            _buildFeatureCard(
-              icon: Icons.edit,
-              title: '직접 입력',
-              description: '약 이름, 복용 시간, 기간 등을\n직접 입력하여 등록합니다',
-            ),
-            const SizedBox(height: AppSizes.lg),
+          _buildFeatureCard(
+            icon: Icons.edit,
+            title: '직접 입력',
+            description: '약 이름, 복용 시간, 기간 등을\n직접 입력하여 등록합니다',
+          ),
+          const SizedBox(height: AppSizes.lg),
 
-            // 등록 버튼
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          const MedicationRegistrationScreen(),
+          // 등록 버튼
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => MedicationRegistrationScreen(
+                      onMedicationAdded: (medication) {
+                        // 약이 추가될 때마다 리스트에 추가
+                        addMedication(medication);
+                      },
                     ),
-                  );
-                },
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('약 등록 시작하기'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSizes.lg,
-                    vertical: AppSizes.md,
                   ),
-                  splashFactory: NoSplash.splashFactory,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                  ),
+                );
+              },
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('약 등록 시작하기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.lg,
+                  vertical: AppSizes.md,
+                ),
+                splashFactory: NoSplash.splashFactory,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusLg),
                 ),
               ),
             ),
+          ),
 
-            const SizedBox(height: AppSizes.lg),
+          const SizedBox(height: AppSizes.lg),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMedicationList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSizes.md),
+      itemCount: _registeredMedications.length,
+      itemBuilder: (context, index) {
+        final medication = _registeredMedications[index];
+        return _buildMedicationCard(medication, index);
+      },
+    );
+  }
+
+  Widget _buildMedicationCard(Map<String, dynamic> medication, int index) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSizes.md),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: Icon(
+                    Icons.medication,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: AppSizes.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        medication['name'],
+                        style: AppTextStyles.h6.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSizes.xs),
+                      Text(
+                        medication['manufacturer'],
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _editMedication(index);
+                    } else if (value == 'delete') {
+                      _deleteMedication(index);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'edit', child: Text('수정')),
+                    const PopupMenuItem(value: 'delete', child: Text('삭제')),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSizes.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInfoItem(
+                    '복용 횟수',
+                    medication['frequency'],
+                    Icons.schedule,
+                  ),
+                ),
+                Expanded(
+                  child: Container(), // 빈 공간
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSizes.sm),
+            _buildInfoItem(
+              '복용 시간',
+              medication['times'].join(', '),
+              Icons.access_time,
+            ),
+            const SizedBox(height: AppSizes.sm),
+            _buildInfoItem(
+              '복용 기간',
+              '${medication['startDate']} ~ ${medication['endDate']}',
+              Icons.calendar_today,
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: AppSizes.xs),
+        Expanded(
+          child: Text(
+            '$label: $value',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _editMedication(int index) {
+    // TODO: 약 수정 화면으로 이동
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${_registeredMedications[index]['name']} 수정 기능은 준비 중입니다.',
+        ),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+  }
+
+  void _deleteMedication(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('약 삭제'),
+        content: Text('${_registeredMedications[index]['name']}을(를) 삭제하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _registeredMedications.removeAt(index);
+              });
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('약이 삭제되었습니다.'),
+                  backgroundColor: AppColors.primary,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              splashFactory: NoSplash.splashFactory,
+            ),
+            child: const Text('삭제', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -390,16 +624,6 @@ class _DisposalTab extends StatelessWidget {
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.location_on, color: AppColors.textPrimary),
-              onPressed: () {
-                // TODO: 현재 위치로 이동
-              },
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-            ),
-          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(48),
             child: TabBar(
@@ -436,24 +660,6 @@ class _PharmacyTab extends StatelessWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-            onPressed: () {
-              // TODO: 상태 새로고침
-            },
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: AppColors.textPrimary),
-            onPressed: () {
-              // TODO: 약 상자 설정
-            },
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-        ],
       ),
       body: const MedicationBoxScreen(),
     );
@@ -475,24 +681,6 @@ class _ProfileTab extends StatelessWidget {
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.share, color: AppColors.textPrimary),
-              onPressed: () {
-                // TODO: 리포트 공유
-              },
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-            ),
-            IconButton(
-              icon: const Icon(Icons.download, color: AppColors.textPrimary),
-              onPressed: () {
-                // TODO: 리포트 다운로드
-              },
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-            ),
-          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(48),
             child: TabBar(

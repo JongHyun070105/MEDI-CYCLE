@@ -69,7 +69,7 @@ class _MedicationRegistrationScreenState
             currentStep: _currentStep,
             totalSteps: 5,
           ),
-          
+
           // 단계별 내용
           Expanded(
             child: PageView(
@@ -89,7 +89,7 @@ class _MedicationRegistrationScreenState
               ],
             ),
           ),
-          
+
           // 하단 버튼
           _buildBottomButtons(),
         ],
@@ -99,27 +99,33 @@ class _MedicationRegistrationScreenState
 
   Widget _buildStep1() {
     return RegistrationStepContent(
+      step: 1,
+      title: '입력 방법 선택',
+      subtitle: '약품을 등록할 방법을 선택해주세요',
       child: Step1InputMethodWidget(
         selectedInputMethod: _selectedInputMethod,
         onInputMethodChanged: (method) {
-          setState(() {
+                  setState(() {
             _selectedInputMethod = method;
-          });
-        },
+        });
+      },
       ),
     );
   }
 
   Widget _buildStep2() {
     return RegistrationStepContent(
+      step: 2,
+      title: '약품명 입력',
+      subtitle: '등록할 약품의 이름을 입력해주세요',
       child: Step2DrugNameWidget(
         drugNameController: _drugNameController,
         onDrugDetailsLoaded: (details) {
           final parts = details.split('|');
-          setState(() {
+            setState(() {
             _selectedDrugManufacturer = parts[0];
             _selectedDrugIngredient = parts[1];
-          });
+            });
         },
       ),
     );
@@ -127,6 +133,9 @@ class _MedicationRegistrationScreenState
 
   Widget _buildStep3() {
     return RegistrationStepContent(
+      step: 3,
+      title: '복용 정보 설정',
+      subtitle: '복용 빈도와 시간을 설정해주세요',
       child: Step3DosageWidget(
         selectedFrequency: _selectedFrequency,
         dosageTimes: _dosageTimes,
@@ -142,31 +151,37 @@ class _MedicationRegistrationScreenState
 
   Widget _buildStep4() {
     return RegistrationStepContent(
+      step: 4,
+      title: '복용 기간 설정',
+      subtitle: '약품을 복용할 기간을 설정해주세요',
       child: Step4PeriodWidget(
         startDate: _startDate,
         endDate: _endDate,
         isIndefinite: _isIndefinite,
         onStartDateChanged: (date) {
-          setState(() {
-            _startDate = date;
-          });
-        },
+            setState(() {
+              _startDate = date;
+            });
+          },
         onEndDateChanged: (date) {
-          setState(() {
+                  setState(() {
             _endDate = date;
-          });
-        },
+                  });
+                },
         onIndefiniteChanged: (isIndefinite) {
-          setState(() {
+              setState(() {
             _isIndefinite = isIndefinite;
-          });
-        },
+              });
+            },
       ),
     );
   }
 
   Widget _buildStep5() {
     return RegistrationStepContent(
+      step: 5,
+      title: '등록 정보 확인',
+      subtitle: '입력한 정보를 확인하고 등록을 완료해주세요',
       child: Step5SummaryWidget(
         drugName: _drugNameController.text.trim(),
         manufacturer: _selectedDrugManufacturer,

@@ -20,8 +20,7 @@ mixin _$AuthState {
   bool get isAuthenticated => throw _privateConstructorUsedError;
   bool get hasError => throw _privateConstructorUsedError;
   String? get errorMessage => throw _privateConstructorUsedError;
-  String? get userEmail => throw _privateConstructorUsedError;
-  String? get userName => throw _privateConstructorUsedError;
+  User? get user => throw _privateConstructorUsedError;
 
   @JsonKey(ignore: true)
   $AuthStateCopyWith<AuthState> get copyWith =>
@@ -38,8 +37,9 @@ abstract class $AuthStateCopyWith<$Res> {
       bool isAuthenticated,
       bool hasError,
       String? errorMessage,
-      String? userEmail,
-      String? userName});
+      User? user});
+
+  $UserCopyWith<$Res>? get user;
 }
 
 /// @nodoc
@@ -59,8 +59,7 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
     Object? isAuthenticated = null,
     Object? hasError = null,
     Object? errorMessage = freezed,
-    Object? userEmail = freezed,
-    Object? userName = freezed,
+    Object? user = freezed,
   }) {
     return _then(_value.copyWith(
       isLoading: null == isLoading
@@ -79,15 +78,23 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
           ? _value.errorMessage
           : errorMessage // ignore: cast_nullable_to_non_nullable
               as String?,
-      userEmail: freezed == userEmail
-          ? _value.userEmail
-          : userEmail // ignore: cast_nullable_to_non_nullable
-              as String?,
-      userName: freezed == userName
-          ? _value.userName
-          : userName // ignore: cast_nullable_to_non_nullable
-              as String?,
+      user: freezed == user
+          ? _value.user
+          : user // ignore: cast_nullable_to_non_nullable
+              as User?,
     ) as $Val);
+  }
+
+  @override
+  @pragma('vm:prefer-inline')
+  $UserCopyWith<$Res>? get user {
+    if (_value.user == null) {
+      return null;
+    }
+
+    return $UserCopyWith<$Res>(_value.user!, (value) {
+      return _then(_value.copyWith(user: value) as $Val);
+    });
   }
 }
 
@@ -104,8 +111,10 @@ abstract class _$$AuthStateImplCopyWith<$Res>
       bool isAuthenticated,
       bool hasError,
       String? errorMessage,
-      String? userEmail,
-      String? userName});
+      User? user});
+
+  @override
+  $UserCopyWith<$Res>? get user;
 }
 
 /// @nodoc
@@ -123,8 +132,7 @@ class __$$AuthStateImplCopyWithImpl<$Res>
     Object? isAuthenticated = null,
     Object? hasError = null,
     Object? errorMessage = freezed,
-    Object? userEmail = freezed,
-    Object? userName = freezed,
+    Object? user = freezed,
   }) {
     return _then(_$AuthStateImpl(
       isLoading: null == isLoading
@@ -143,14 +151,10 @@ class __$$AuthStateImplCopyWithImpl<$Res>
           ? _value.errorMessage
           : errorMessage // ignore: cast_nullable_to_non_nullable
               as String?,
-      userEmail: freezed == userEmail
-          ? _value.userEmail
-          : userEmail // ignore: cast_nullable_to_non_nullable
-              as String?,
-      userName: freezed == userName
-          ? _value.userName
-          : userName // ignore: cast_nullable_to_non_nullable
-              as String?,
+      user: freezed == user
+          ? _value.user
+          : user // ignore: cast_nullable_to_non_nullable
+              as User?,
     ));
   }
 }
@@ -163,8 +167,7 @@ class _$AuthStateImpl implements _AuthState {
       this.isAuthenticated = false,
       this.hasError = false,
       this.errorMessage,
-      this.userEmail,
-      this.userName});
+      this.user});
 
   @override
   @JsonKey()
@@ -178,13 +181,11 @@ class _$AuthStateImpl implements _AuthState {
   @override
   final String? errorMessage;
   @override
-  final String? userEmail;
-  @override
-  final String? userName;
+  final User? user;
 
   @override
   String toString() {
-    return 'AuthState(isLoading: $isLoading, isAuthenticated: $isAuthenticated, hasError: $hasError, errorMessage: $errorMessage, userEmail: $userEmail, userName: $userName)';
+    return 'AuthState(isLoading: $isLoading, isAuthenticated: $isAuthenticated, hasError: $hasError, errorMessage: $errorMessage, user: $user)';
   }
 
   @override
@@ -200,15 +201,12 @@ class _$AuthStateImpl implements _AuthState {
                 other.hasError == hasError) &&
             (identical(other.errorMessage, errorMessage) ||
                 other.errorMessage == errorMessage) &&
-            (identical(other.userEmail, userEmail) ||
-                other.userEmail == userEmail) &&
-            (identical(other.userName, userName) ||
-                other.userName == userName));
+            (identical(other.user, user) || other.user == user));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, isLoading, isAuthenticated,
-      hasError, errorMessage, userEmail, userName);
+  int get hashCode => Object.hash(
+      runtimeType, isLoading, isAuthenticated, hasError, errorMessage, user);
 
   @JsonKey(ignore: true)
   @override
@@ -223,8 +221,7 @@ abstract class _AuthState implements AuthState {
       final bool isAuthenticated,
       final bool hasError,
       final String? errorMessage,
-      final String? userEmail,
-      final String? userName}) = _$AuthStateImpl;
+      final User? user}) = _$AuthStateImpl;
 
   @override
   bool get isLoading;
@@ -235,9 +232,7 @@ abstract class _AuthState implements AuthState {
   @override
   String? get errorMessage;
   @override
-  String? get userEmail;
-  @override
-  String? get userName;
+  User? get user;
   @override
   @JsonKey(ignore: true)
   _$$AuthStateImplCopyWith<_$AuthStateImpl> get copyWith =>

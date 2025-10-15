@@ -72,13 +72,12 @@ class _ProfileCompletionScreenState
       final profileController = ref.read(
         profileCompletionControllerProvider.notifier,
       );
-      final now = DateTime.now();
-      final age = now.year - _selectedBirthDate!.year;
 
       await profileController.completeProfile(
-        age: age,
+        birthDate: _selectedBirthDate!,
         gender: _selectedGender!,
         address: _selectedAddress?.roadAddr ?? _addressController.text.trim(),
+        detailAddress: _detailAddressController.text.trim(),
       );
 
       final profileState = ref.read(profileCompletionControllerProvider);
@@ -111,12 +110,12 @@ class _ProfileCompletionScreenState
     final profileState = ref.watch(profileCompletionControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('프로필 완성'),
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.white,
         elevation: 0,
-        surfaceTintColor: AppColors.background,
+        surfaceTintColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios),
           onPressed: () => Navigator.of(context).pop(),
@@ -134,25 +133,10 @@ class _ProfileCompletionScreenState
                 Center(
                   child: Column(
                     children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(40),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.person_add,
-                          size: 40,
-                          color: Colors.white,
-                        ),
+                      Icon(
+                        Icons.person_add_alt_1_rounded,
+                        size: 80,
+                        color: AppColors.primary,
                       ),
                       const SizedBox(height: AppSizes.lg),
                       Text(
@@ -176,172 +160,153 @@ class _ProfileCompletionScreenState
 
                 const SizedBox(height: AppSizes.xxl),
 
-                // 프로필 완성 폼
-                Card(
-                  elevation: AppSizes.cardElevation,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.cardRadius),
+                // 생년월일 선택
+                Text(
+                  '생년월일',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSizes.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                ),
+                const SizedBox(height: AppSizes.sm),
+                GestureDetector(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedBirthDate ?? DateTime(2000),
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() {
+                        _selectedBirthDate = date;
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSizes.md,
+                      vertical: AppSizes.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                    ),
+                    child: Row(
                       children: [
-                        // 생년월일 선택
-                        Text(
-                          '생년월일',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
+                        const Icon(
+                          Icons.cake_outlined,
+                          color: AppColors.textSecondary,
                         ),
-                        const SizedBox(height: AppSizes.sm),
-                        GestureDetector(
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: _selectedBirthDate ?? DateTime(2000),
-                              firstDate: DateTime(1900),
-                              lastDate: DateTime.now(),
-                            );
-                            if (date != null) {
-                              setState(() {
-                                _selectedBirthDate = date;
-                              });
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSizes.md,
-                              vertical: AppSizes.sm,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: AppColors.border),
-                              borderRadius: BorderRadius.circular(
-                                AppSizes.radiusMd,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.cake_outlined,
-                                  color: AppColors.textSecondary,
-                                ),
-                                const SizedBox(width: AppSizes.sm),
-                                Expanded(
-                                  child: Text(
-                                    _selectedBirthDate != null
-                                        ? '${_selectedBirthDate!.year}년 ${_selectedBirthDate!.month}월 ${_selectedBirthDate!.day}일'
-                                        : '생년월일을 선택해주세요',
-                                    style: AppTextStyles.bodyMedium.copyWith(
-                                      color: _selectedBirthDate != null
-                                          ? AppColors.textPrimary
-                                          : AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.calendar_today,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ],
+                        const SizedBox(width: AppSizes.sm),
+                        Expanded(
+                          child: Text(
+                            _selectedBirthDate != null
+                                ? '${_selectedBirthDate!.year}년 ${_selectedBirthDate!.month}월 ${_selectedBirthDate!.day}일'
+                                : '생년월일을 선택해주세요',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: _selectedBirthDate != null
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: AppSizes.lg),
-
-                        // 성별 선택
-                        Text(
-                          '성별',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSizes.sm),
-                        Row(
-                          children: _genders.map((gender) {
-                            return Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(
-                                  right: AppSizes.sm,
-                                ),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedGender = gender;
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: AppSizes.md,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _selectedGender == gender
-                                          ? AppColors.primary
-                                          : AppColors.background,
-                                      borderRadius: BorderRadius.circular(
-                                        AppSizes.radiusMd,
-                                      ),
-                                      border: Border.all(
-                                        color: _selectedGender == gender
-                                            ? AppColors.primary
-                                            : AppColors.border,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      gender,
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        color: _selectedGender == gender
-                                            ? Colors.white
-                                            : AppColors.textPrimary,
-                                        fontWeight: _selectedGender == gender
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-
-                        const SizedBox(height: AppSizes.lg),
-
-                        // 주소 입력
-                        AddressInputField(
-                          controller: _addressController,
-                          labelText: '주소',
-                          hintText: '주소를 검색해주세요',
-                          onAddressSelected: (address) {
-                            setState(() {
-                              _selectedAddress = address;
-                            });
-                          },
-                          validator: (value) {
-                            if (_selectedAddress == null &&
-                                (value == null || value.isEmpty)) {
-                              return '주소를 입력해주세요';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: AppSizes.lg),
-
-                        // 상세주소 입력 (선택사항)
-                        CustomTextField(
-                          controller: _detailAddressController,
-                          labelText: '상세주소 (선택사항)',
-                          hintText: '상세주소를 입력해주세요',
-                          prefixIcon: Icons.home_outlined,
+                        const Icon(
+                          Icons.calendar_today,
+                          color: AppColors.textSecondary,
                         ),
                       ],
                     ),
                   ),
+                ),
+
+                const SizedBox(height: AppSizes.lg),
+
+                // 성별 선택
+                Text(
+                  '성별',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppSizes.sm),
+                Row(
+                  children: _genders.map((gender) {
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: AppSizes.sm),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedGender = gender;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSizes.md,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _selectedGender == gender
+                                  ? AppColors.primary
+                                  : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(
+                                AppSizes.radiusMd,
+                              ),
+                              border: Border.all(
+                                color: _selectedGender == gender
+                                    ? AppColors.primary
+                                    : AppColors.border,
+                              ),
+                            ),
+                            child: Text(
+                              gender,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: _selectedGender == gender
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                                fontWeight: _selectedGender == gender
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: AppSizes.lg),
+
+                // 주소 입력
+                AddressInputField(
+                  controller: _addressController,
+                  labelText: '주소',
+                  hintText: '주소를 검색해주세요',
+                  onAddressSelected: (address) {
+                    setState(() {
+                      _selectedAddress = address;
+                    });
+                  },
+                  validator: (value) {
+                    if (_selectedAddress == null &&
+                        (value == null || value.isEmpty)) {
+                      return '주소를 입력해주세요';
+                    }
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: AppSizes.lg),
+
+                // 상세주소 입력 (선택사항)
+                CustomTextField(
+                  controller: _detailAddressController,
+                  labelText: '상세주소 (선택사항)',
+                  hintText: '상세주소를 입력해주세요',
+                  prefixIcon: Icons.home_outlined,
                 ),
 
                 const SizedBox(height: AppSizes.xl),

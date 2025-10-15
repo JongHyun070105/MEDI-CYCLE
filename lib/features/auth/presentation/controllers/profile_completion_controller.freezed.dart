@@ -20,9 +20,10 @@ mixin _$ProfileCompletionState {
   bool get isCompleted => throw _privateConstructorUsedError;
   bool get hasError => throw _privateConstructorUsedError;
   String? get errorMessage => throw _privateConstructorUsedError;
-  int? get age => throw _privateConstructorUsedError;
+  DateTime? get birthDate => throw _privateConstructorUsedError;
   String? get gender => throw _privateConstructorUsedError;
   String? get address => throw _privateConstructorUsedError;
+  String? get detailAddress => throw _privateConstructorUsedError;
 
   @JsonKey(ignore: true)
   $ProfileCompletionStateCopyWith<ProfileCompletionState> get copyWith =>
@@ -40,9 +41,10 @@ abstract class $ProfileCompletionStateCopyWith<$Res> {
       bool isCompleted,
       bool hasError,
       String? errorMessage,
-      int? age,
+      DateTime? birthDate,
       String? gender,
-      String? address});
+      String? address,
+      String? detailAddress});
 }
 
 /// @nodoc
@@ -63,9 +65,10 @@ class _$ProfileCompletionStateCopyWithImpl<$Res,
     Object? isCompleted = null,
     Object? hasError = null,
     Object? errorMessage = freezed,
-    Object? age = freezed,
+    Object? birthDate = freezed,
     Object? gender = freezed,
     Object? address = freezed,
+    Object? detailAddress = freezed,
   }) {
     return _then(_value.copyWith(
       isLoading: null == isLoading
@@ -84,10 +87,10 @@ class _$ProfileCompletionStateCopyWithImpl<$Res,
           ? _value.errorMessage
           : errorMessage // ignore: cast_nullable_to_non_nullable
               as String?,
-      age: freezed == age
-          ? _value.age
-          : age // ignore: cast_nullable_to_non_nullable
-              as int?,
+      birthDate: freezed == birthDate
+          ? _value.birthDate
+          : birthDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       gender: freezed == gender
           ? _value.gender
           : gender // ignore: cast_nullable_to_non_nullable
@@ -95,6 +98,10 @@ class _$ProfileCompletionStateCopyWithImpl<$Res,
       address: freezed == address
           ? _value.address
           : address // ignore: cast_nullable_to_non_nullable
+              as String?,
+      detailAddress: freezed == detailAddress
+          ? _value.detailAddress
+          : detailAddress // ignore: cast_nullable_to_non_nullable
               as String?,
     ) as $Val);
   }
@@ -114,9 +121,10 @@ abstract class _$$ProfileCompletionStateImplCopyWith<$Res>
       bool isCompleted,
       bool hasError,
       String? errorMessage,
-      int? age,
+      DateTime? birthDate,
       String? gender,
-      String? address});
+      String? address,
+      String? detailAddress});
 }
 
 /// @nodoc
@@ -136,9 +144,10 @@ class __$$ProfileCompletionStateImplCopyWithImpl<$Res>
     Object? isCompleted = null,
     Object? hasError = null,
     Object? errorMessage = freezed,
-    Object? age = freezed,
+    Object? birthDate = freezed,
     Object? gender = freezed,
     Object? address = freezed,
+    Object? detailAddress = freezed,
   }) {
     return _then(_$ProfileCompletionStateImpl(
       isLoading: null == isLoading
@@ -157,10 +166,10 @@ class __$$ProfileCompletionStateImplCopyWithImpl<$Res>
           ? _value.errorMessage
           : errorMessage // ignore: cast_nullable_to_non_nullable
               as String?,
-      age: freezed == age
-          ? _value.age
-          : age // ignore: cast_nullable_to_non_nullable
-              as int?,
+      birthDate: freezed == birthDate
+          ? _value.birthDate
+          : birthDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       gender: freezed == gender
           ? _value.gender
           : gender // ignore: cast_nullable_to_non_nullable
@@ -168,6 +177,10 @@ class __$$ProfileCompletionStateImplCopyWithImpl<$Res>
       address: freezed == address
           ? _value.address
           : address // ignore: cast_nullable_to_non_nullable
+              as String?,
+      detailAddress: freezed == detailAddress
+          ? _value.detailAddress
+          : detailAddress // ignore: cast_nullable_to_non_nullable
               as String?,
     ));
   }
@@ -181,9 +194,10 @@ class _$ProfileCompletionStateImpl implements _ProfileCompletionState {
       this.isCompleted = false,
       this.hasError = false,
       this.errorMessage,
-      this.age,
+      this.birthDate,
       this.gender,
-      this.address});
+      this.address,
+      this.detailAddress});
 
   @override
   @JsonKey()
@@ -197,15 +211,17 @@ class _$ProfileCompletionStateImpl implements _ProfileCompletionState {
   @override
   final String? errorMessage;
   @override
-  final int? age;
+  final DateTime? birthDate;
   @override
   final String? gender;
   @override
   final String? address;
+  @override
+  final String? detailAddress;
 
   @override
   String toString() {
-    return 'ProfileCompletionState(isLoading: $isLoading, isCompleted: $isCompleted, hasError: $hasError, errorMessage: $errorMessage, age: $age, gender: $gender, address: $address)';
+    return 'ProfileCompletionState(isLoading: $isLoading, isCompleted: $isCompleted, hasError: $hasError, errorMessage: $errorMessage, birthDate: $birthDate, gender: $gender, address: $address, detailAddress: $detailAddress)';
   }
 
   @override
@@ -221,14 +237,17 @@ class _$ProfileCompletionStateImpl implements _ProfileCompletionState {
                 other.hasError == hasError) &&
             (identical(other.errorMessage, errorMessage) ||
                 other.errorMessage == errorMessage) &&
-            (identical(other.age, age) || other.age == age) &&
+            (identical(other.birthDate, birthDate) ||
+                other.birthDate == birthDate) &&
             (identical(other.gender, gender) || other.gender == gender) &&
-            (identical(other.address, address) || other.address == address));
+            (identical(other.address, address) || other.address == address) &&
+            (identical(other.detailAddress, detailAddress) ||
+                other.detailAddress == detailAddress));
   }
 
   @override
   int get hashCode => Object.hash(runtimeType, isLoading, isCompleted, hasError,
-      errorMessage, age, gender, address);
+      errorMessage, birthDate, gender, address, detailAddress);
 
   @JsonKey(ignore: true)
   @override
@@ -244,9 +263,10 @@ abstract class _ProfileCompletionState implements ProfileCompletionState {
       final bool isCompleted,
       final bool hasError,
       final String? errorMessage,
-      final int? age,
+      final DateTime? birthDate,
       final String? gender,
-      final String? address}) = _$ProfileCompletionStateImpl;
+      final String? address,
+      final String? detailAddress}) = _$ProfileCompletionStateImpl;
 
   @override
   bool get isLoading;
@@ -257,11 +277,13 @@ abstract class _ProfileCompletionState implements ProfileCompletionState {
   @override
   String? get errorMessage;
   @override
-  int? get age;
+  DateTime? get birthDate;
   @override
   String? get gender;
   @override
   String? get address;
+  @override
+  String? get detailAddress;
   @override
   @JsonKey(ignore: true)
   _$$ProfileCompletionStateImplCopyWith<_$ProfileCompletionStateImpl>

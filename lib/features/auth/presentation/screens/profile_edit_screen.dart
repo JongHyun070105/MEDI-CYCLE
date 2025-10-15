@@ -88,9 +88,10 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       final age = now.year - _selectedBirthDate!.year;
 
       await profileController.completeProfile(
-        age: age,
+        birthDate: _selectedBirthDate!,
         gender: _selectedGender!,
         address: _selectedAddress?.roadAddr ?? _addressController.text.trim(),
+        detailAddress: _detailAddressController.text.trim(),
       );
 
       final profileState = ref.read(profileCompletionControllerProvider);

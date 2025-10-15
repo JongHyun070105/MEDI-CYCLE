@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../../../shared/models/user_model.dart';
+import '../../../../shared/services/auth_service.dart';
 
 part 'auth_controller.freezed.dart';
 
@@ -10,12 +12,13 @@ class AuthState with _$AuthState {
     @Default(false) bool isAuthenticated,
     @Default(false) bool hasError,
     String? errorMessage,
-    String? userEmail,
-    String? userName,
+    User? user,
   }) = _AuthState;
 }
 
 class AuthController extends StateNotifier<AuthState> {
+  final AuthService _authService = authService;
+
   AuthController() : super(const AuthState());
 
   Future<void> login({required String email, required String password}) async {
@@ -26,29 +29,22 @@ class AuthController extends StateNotifier<AuthState> {
     );
 
     try {
-      // 실제 구현에서는 API 호출을 통해 로그인 처리
-      await Future.delayed(const Duration(seconds: 2)); // 시뮬레이션
+      final response = await _authService.login(
+        UserLoginRequest(email: email, password: password),
+      );
 
-      // 임시 로그인 로직 (실제로는 서버에서 인증)
-      if (email.isNotEmpty && password.isNotEmpty) {
-        state = state.copyWith(
-          isLoading: false,
-          isAuthenticated: true,
-          userEmail: email,
-          userName: email.split('@')[0], // 임시로 이메일에서 이름 추출
-        );
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          hasError: true,
-          errorMessage: '이메일과 비밀번호를 입력해주세요.',
-        );
-      }
+      state = state.copyWith(
+        isLoading: false,
+        isAuthenticated: true,
+        user: response.user,
+        hasError: false,
+        errorMessage: null,
+      );
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         hasError: true,
-        errorMessage: '로그인 중 오류가 발생했습니다: ${e.toString()}',
+        errorMessage: e.toString(),
       );
     }
   }
@@ -57,6 +53,9 @@ class AuthController extends StateNotifier<AuthState> {
     required String name,
     required String email,
     required String password,
+    int? age,
+    String? address,
+    String? gender,
   }) async {
     state = state.copyWith(
       isLoading: true,
@@ -65,41 +64,59 @@ class AuthController extends StateNotifier<AuthState> {
     );
 
     try {
-      // 실제 구현에서는 API 호출을 통해 회원가입 처리
-      await Future.delayed(const Duration(seconds: 2)); // 시뮬레이션
+      print('🔍 AuthController.register 시작');
+      final response = await _authService.signup(
+        UserSignupRequest(
+          email: email,
+          password: password,
+          name: name,
+          age: age,
+          address: address,
+          gender: gender,
+        ),
+      );
 
-      // 임시 회원가입 로직 (실제로는 서버에서 처리)
-      if (name.isNotEmpty && email.isNotEmpty && password.isNotEmpty) {
-        state = state.copyWith(
-          isLoading: false,
-          isAuthenticated: true,
-          userEmail: email,
-          userName: name,
-        );
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          hasError: true,
-          errorMessage: '모든 필드를 입력해주세요.',
-        );
-      }
+      print('🔍 AuthController.register 응답 받음: $response');
+      print('🔍 AuthController.register user: ${response.user}');
+
+      state = state.copyWith(
+        isLoading: false,
+        isAuthenticated: true,
+        user: response.user,
+        hasError: false,
+        errorMessage: null,
+      );
+
+      print('🔍 AuthController.register 상태 업데이트 완료');
     } catch (e) {
+      print('❌ AuthController.register 오류: $e');
+      print('❌ AuthController.register 오류 타입: ${e.runtimeType}');
       state = state.copyWith(
         isLoading: false,
         hasError: true,
-        errorMessage: '회원가입 중 오류가 발생했습니다: ${e.toString()}',
+        errorMessage: e.toString(),
       );
     }
   }
 
   Future<void> logout() async {
-    state = state.copyWith(
-      isAuthenticated: false,
-      userEmail: null,
-      userName: null,
-      hasError: false,
-      errorMessage: null,
-    );
+    try {
+      await _authService.logout();
+      state = state.copyWith(
+        isAuthenticated: false,
+        user: null,
+        hasError: false,
+        errorMessage: null,
+      );
+    } catch (e) {
+      // 로그아웃 실패해도 로컬 상태는 초기화
+      state = state.copyWith(
+        isAuthenticated: false,
+        user: null,
+        hasError: false,
+        errorMessage: null,
+      );
+    }
   }
 
   Future<void> resetPassword(String email) async {
@@ -110,8 +127,8 @@ class AuthController extends StateNotifier<AuthState> {
     );
 
     try {
-      // 실제 구현에서는 API 호출을 통해 비밀번호 재설정 처리
-      await Future.delayed(const Duration(seconds: 1)); // 시뮬레이션
+      // TODO: 서버에 비밀번호 재설정 API가 구현되면 연동
+      await Future.delayed(const Duration(seconds: 1)); // 임시 시뮬레이션
 
       state = state.copyWith(isLoading: false, hasError: false);
     } catch (e) {
@@ -120,6 +137,19 @@ class AuthController extends StateNotifier<AuthState> {
         hasError: true,
         errorMessage: '비밀번호 재설정 중 오류가 발생했습니다: ${e.toString()}',
       );
+    }
+  }
+
+  /// 앱 시작 시 토큰 확인
+  Future<void> checkAuthStatus() async {
+    if (_authService.isLoggedIn) {
+      try {
+        final user = await _authService.getMe();
+        state = state.copyWith(isAuthenticated: true, user: user);
+      } catch (e) {
+        // 토큰이 유효하지 않은 경우 로그아웃
+        await logout();
+      }
     }
   }
 }

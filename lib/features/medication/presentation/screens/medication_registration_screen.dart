@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/services/medication_service.dart';
 import '../widgets/registration_progress_bar.dart';
 import '../widgets/registration_step_content.dart';
 import '../widgets/medication_registration/step1_input_method_widget.dart';
@@ -14,10 +14,7 @@ import '../widgets/medication_registration/step5_summary_widget.dart';
 class MedicationRegistrationScreen extends ConsumerStatefulWidget {
   final Function(Map<String, dynamic>)? onMedicationAdded;
 
-  const MedicationRegistrationScreen({
-    super.key, 
-    this.onMedicationAdded,
-  });
+  const MedicationRegistrationScreen({super.key, this.onMedicationAdded});
 
   @override
   ConsumerState<MedicationRegistrationScreen> createState() =>
@@ -54,10 +51,10 @@ class _MedicationRegistrationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('약 등록'),
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -65,10 +62,7 @@ class _MedicationRegistrationScreenState
       body: Column(
         children: [
           // 진행률 표시
-          RegistrationProgressBar(
-            currentStep: _currentStep,
-            totalSteps: 5,
-          ),
+          RegistrationProgressBar(currentStep: _currentStep, totalSteps: 5),
 
           // 단계별 내용
           Expanded(
@@ -105,10 +99,10 @@ class _MedicationRegistrationScreenState
       child: Step1InputMethodWidget(
         selectedInputMethod: _selectedInputMethod,
         onInputMethodChanged: (method) {
-                  setState(() {
+          setState(() {
             _selectedInputMethod = method;
-        });
-      },
+          });
+        },
       ),
     );
   }
@@ -122,10 +116,10 @@ class _MedicationRegistrationScreenState
         drugNameController: _drugNameController,
         onDrugDetailsLoaded: (details) {
           final parts = details.split('|');
-            setState(() {
+          setState(() {
             _selectedDrugManufacturer = parts[0];
             _selectedDrugIngredient = parts[1];
-            });
+          });
         },
       ),
     );
@@ -159,20 +153,20 @@ class _MedicationRegistrationScreenState
         endDate: _endDate,
         isIndefinite: _isIndefinite,
         onStartDateChanged: (date) {
-            setState(() {
-              _startDate = date;
-            });
-          },
+          setState(() {
+            _startDate = date;
+          });
+        },
         onEndDateChanged: (date) {
-                  setState(() {
+          setState(() {
             _endDate = date;
-                  });
-                },
+          });
+        },
         onIndefiniteChanged: (isIndefinite) {
-              setState(() {
+          setState(() {
             _isIndefinite = isIndefinite;
-              });
-            },
+          });
+        },
       ),
     );
   }
@@ -206,14 +200,8 @@ class _MedicationRegistrationScreenState
         bottom: MediaQuery.of(context).padding.bottom + AppSizes.lg,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
       ),
       child: Row(
         children: [
@@ -306,39 +294,74 @@ class _MedicationRegistrationScreenState
     }
   }
 
-  bool _completeRegistration({bool shouldCloseScreen = true}) {
-    final Map<String, dynamic> registered = {
-      'name': _drugNameController.text.trim().isEmpty
-          ? '사용자 입력 약'
-          : _drugNameController.text.trim(),
-      'manufacturer': _selectedDrugManufacturer,
-      'frequency': '하루 $_selectedFrequency회',
-      'times': List<String>.from(_dosageTimes),
-      'startDate':
-          '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}',
-      'endDate': _isIndefinite
-          ? '무기한'
-          : '${_endDate.year}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}',
-    };
+  Future<bool> _completeRegistration({bool shouldCloseScreen = true}) async {
+    try {
+      // 서버 형식으로 데이터 변환
+      final request = MedicationService.convertToServerFormat(
+        drugName: _drugNameController.text.trim().isEmpty
+            ? '사용자 입력 약'
+            : _drugNameController.text.trim(),
+        frequency: '하루 $_selectedFrequency회',
+        dosageTimes: _dosageTimes.map((timeStr) {
+          final parts = timeStr.split(':');
+          return DateTime.now().copyWith(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          );
+        }).toList(),
+        mealRelations: _mealRelations,
+        mealOffsets: _mealOffsets,
+        startDate: _startDate,
+        endDate: _isIndefinite ? null : _endDate,
+        isIndefinite: _isIndefinite,
+        manufacturer: _selectedDrugManufacturer,
+        ingredient: _selectedDrugIngredient,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('약 등록이 완료되었습니다!'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
+      // 서버에 약 등록 요청
+      final medication = await medicationService.createMedication(request);
 
-    if (shouldCloseScreen) {
-      Navigator.of(context).pop(registered);
-    } else {
-      _addMedicationToList(registered);
+      // 로컬 형식으로 변환하여 UI에 표시
+      final registered = {
+        'id': medication.id,
+        'name': medication.name,
+        'manufacturer': _selectedDrugManufacturer,
+        'frequency': '하루 $_selectedFrequency회',
+        'times': List<String>.from(_dosageTimes),
+        'startDate':
+            '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}',
+        'endDate': _isIndefinite
+            ? '무기한'
+            : '${_endDate.year}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}',
+      };
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('약 등록이 완료되었습니다!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+
+      if (shouldCloseScreen) {
+        Navigator.of(context).pop(registered);
+      } else {
+        _addMedicationToList(registered);
+      }
+      return true;
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('약 등록 중 오류가 발생했습니다: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return false;
     }
-    return true;
   }
 
   void _addMedicationToList(Map<String, dynamic> medication) {
     print('약이 리스트에 추가되었습니다: ${medication['name']}');
-    
+
     if (widget.onMedicationAdded != null) {
       widget.onMedicationAdded!(medication);
     }
@@ -346,7 +369,7 @@ class _MedicationRegistrationScreenState
 
   void _addAnotherMedication() async {
     // 현재 약을 먼저 등록 (화면은 닫지 않음)
-    final registered = _completeRegistration(shouldCloseScreen: false);
+    final registered = await _completeRegistration(shouldCloseScreen: false);
 
     if (registered) {
       // 등록 성공 후 폼 초기화
@@ -357,7 +380,7 @@ class _MedicationRegistrationScreenState
       _mealOffsets = List.filled(_selectedFrequency, 0);
       _startDate = DateTime.now();
       _endDate = DateTime.now().add(const Duration(days: 7));
-      
+
       // 약 상세 정보 초기화
       _selectedDrugManufacturer = '-';
       _selectedDrugIngredient = '-';

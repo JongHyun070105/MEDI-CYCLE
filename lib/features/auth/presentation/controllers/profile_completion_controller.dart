@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../../../shared/services/auth_service.dart';
 
 part 'profile_completion_controller.freezed.dart';
 
@@ -10,20 +11,24 @@ class ProfileCompletionState with _$ProfileCompletionState {
     @Default(false) bool isCompleted,
     @Default(false) bool hasError,
     String? errorMessage,
-    int? age,
+    DateTime? birthDate,
     String? gender,
     String? address,
+    String? detailAddress,
   }) = _ProfileCompletionState;
 }
 
 class ProfileCompletionController
     extends StateNotifier<ProfileCompletionState> {
+  final AuthService _authService = authService;
+
   ProfileCompletionController() : super(const ProfileCompletionState());
 
   Future<void> completeProfile({
-    required int age,
+    required DateTime birthDate,
     required String gender,
     required String address,
+    String? detailAddress,
   }) async {
     state = state.copyWith(
       isLoading: true,
@@ -32,16 +37,19 @@ class ProfileCompletionController
     );
 
     try {
-      // 실제 구현에서는 API 호출을 통해 프로필 정보 저장
-      await Future.delayed(const Duration(seconds: 1)); // 시뮬레이션
+      // 생년월일로부터 나이 계산 (현재는 사용하지 않음)
+      // final now = DateTime.now();
+      // final age = now.year - birthDate.year;
 
-      // 프로필 정보 저장 로직
+      // 프로필 정보 업데이트 (실제로는 서버 API 호출)
+      // 현재는 로컬 상태만 업데이트
       state = state.copyWith(
         isLoading: false,
         isCompleted: true,
-        age: age,
+        birthDate: birthDate,
         gender: gender,
         address: address,
+        detailAddress: detailAddress,
       );
     } catch (e) {
       state = state.copyWith(

@@ -16,11 +16,11 @@ class SettingsScreen extends ConsumerWidget {
     final authState = ref.watch(authControllerProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('설정'),
-        backgroundColor: AppColors.background,
-        surfaceTintColor: AppColors.background,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
@@ -34,69 +34,62 @@ class SettingsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 사용자 정보 카드
-            Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
+            Container(
+              padding: const EdgeInsets.all(AppSizes.xl),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                border: Border.all(color: AppColors.primary.withOpacity(0.1)),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSizes.lg),
-                child: Column(
-                  children: [
-                    // 프로필 이미지
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(40),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.person,
-                        size: 40,
-                        color: Colors.white,
-                      ),
+              child: Column(
+                children: [
+                  // 프로필 이미지
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(40),
                     ),
-
-                    const SizedBox(height: AppSizes.md),
-
-                    // 사용자 이름
-                    Text(
-                      authState.userName ?? '사용자',
-                      style: AppTextStyles.h5.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: const Icon(
+                      Icons.person,
+                      size: 40,
+                      color: Colors.white,
                     ),
+                  ),
 
-                    const SizedBox(height: AppSizes.xs),
+                  const SizedBox(height: AppSizes.md),
 
-                    // 이메일
-                    Text(
-                      authState.userEmail ?? 'user@example.com',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                  // 사용자 이름
+                  Text(
+                    authState.user?.name ?? '사용자',
+                    style: AppTextStyles.h5.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: AppSizes.xs),
+
+                  // 이메일
+                  Text(
+                    authState.user?.email ?? 'user@example.com',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
 
             const SizedBox(height: AppSizes.xl),
 
             // 설정 메뉴
-            Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                border: Border.all(color: AppColors.border),
               ),
               child: Column(
                 children: [

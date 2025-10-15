@@ -117,14 +117,14 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
             // 약 등록 탭일 때는 약 등록 화면으로 이동
             final result = await Navigator.push(
               context,
-             MaterialPageRoute(
-               builder: (context) => MedicationRegistrationScreen(
-                 onMedicationAdded: (medication) {
-                   // 약이 추가될 때마다 리스트에 추가
-                   _medicationTabKey.currentState?.addMedication(medication);
-                 },
-               ),
-             ),
+              MaterialPageRoute(
+                builder: (context) => MedicationRegistrationScreen(
+                  onMedicationAdded: (medication) {
+                    // 약이 추가될 때마다 리스트에 추가
+                    _medicationTabKey.currentState?.addMedication(medication);
+                  },
+                ),
+              ),
             );
             if (result != null && result is Map<String, dynamic>) {
               _medicationTabKey.currentState?.addMedication(result);
@@ -390,9 +390,11 @@ class _MedicationTabState extends State<_MedicationTab> {
   Widget _buildMedicationCard(Map<String, dynamic> medication, int index) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppSizes.md),
-      elevation: 2,
+      elevation: 0,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        side: BorderSide(color: AppColors.border, width: 1),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSizes.lg),

@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../shared/services/api_client.dart';
 import '../controllers/splash_controller.dart';
+import '../controllers/auth_controller.dart';
 import 'login_screen.dart';
+import '../../../medication/presentation/screens/medication_home_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -65,9 +68,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await splashController.checkNetworkConnection();
 
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+      // 저장된 토큰 확인
+      final apiClient = ApiClient();
+      final token = await apiClient.getToken();
+
+      if (token != null && token.isNotEmpty) {
+        // 토큰이 있으면 프로필 로드 후 홈 화면으로 이동
+        final authController = ref.read(authControllerProvider.notifier);
+        await authController.loadUserProfile();
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const MedicationHomeScreen()),
+        );
+      } else {
+        // 토큰이 없으면 로그인 화면으로 이동
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
   }
 

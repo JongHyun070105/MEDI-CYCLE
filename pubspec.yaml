@@ -59,7 +59,7 @@ dependencies:
   xml: ^6.5.0
 
   # QR 코드 스캔
-  qr_code_scanner: ^1.0.1
+  mobile_scanner: ^3.5.0
 
   # 위치 서비스
   geolocator: ^11.0.0

@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medicycle_postgres
+    environment:
+      POSTGRES_USER: medicycle
+      POSTGRES_PASSWORD: medicycle_password
+      POSTGRES_DB: medicycle_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - medicycle_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medicycle -d medicycle_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: medicycle_api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: medicycle
+      DB_PASSWORD: medicycle_password
+      DB_NAME: medicycle_db
+      JWT_SECRET: medicycle_jwt_secret_key_change_in_production
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: "http://localhost:*"
+      GEMINI_API_KEY: AIzaSyAGjs6sVTbLiDWz0ELsUlyCK3BPIHaVSeg
+      EAPIYAK_SERVICE_KEY: dJfT/j5TTe7mvR8DIXbP9SoyhvH+Fx7dS27bsViReXQiQtQPPp6ng7o1jHITVXdW3PRS/20m48MQgaBT9nFecw==
+      CLOUDFLARE_WORKER_URL: https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - medicycle_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  medicycle_network:
+    driver: bridge

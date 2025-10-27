@@ -9,6 +9,7 @@ import '../widgets/custom_text_field.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/address_input_field.dart';
 import '../../../../shared/services/address_search_service.dart';
+import '../../../../shared/services/api_client.dart';
 
 class ProfileEditScreen extends ConsumerStatefulWidget {
   const ProfileEditScreen({super.key});
@@ -33,11 +34,36 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   @override
   void initState() {
     super.initState();
-    // 기존 사용자 정보로 초기화 (실제로는 API에서 가져와야 함)
-    _nameController.text = '사용자';
-    _emailController.text = 'user@example.com';
-    _selectedGender = '남성';
-    _selectedBirthDate = DateTime(1990);
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final apiClient = ApiClient();
+      final response = await apiClient.getProfile();
+
+      if (response['user'] != null) {
+        final user = response['user'];
+        setState(() {
+          _nameController.text = user['name'] ?? '';
+          _emailController.text = user['email'] ?? '';
+          _addressController.text = user['address'] ?? '';
+          _selectedGender = user['gender'] ?? '남성';
+
+          // 생년월일 파싱 (있는 경우)
+          if (user['age'] != null && user['age'] > 0) {
+            final currentYear = DateTime.now().year;
+            final age = (user['age'] as num).toInt();
+            _selectedBirthDate = DateTime(currentYear - age);
+          }
+        });
+      }
+    } catch (e) {
+      // 기본값 유지
+      _nameController.text = '';
+      _emailController.text = '';
+      _selectedGender = '남성';
+    }
   }
 
   @override

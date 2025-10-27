@@ -1,0 +1,11 @@
+name = "take-your-medicine-api-proxy"
+main = "src/cloudflare/index.ts"
+compatibility_date = "2024-10-27"
+
+[env.development]
+vars = { BACKEND_URL = "http://localhost:3000" }
+secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY"]
+
+[env.production]
+vars = { BACKEND_URL = "http://localhost:3000" }
+secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY"]

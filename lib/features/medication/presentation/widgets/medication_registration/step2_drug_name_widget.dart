@@ -35,7 +35,7 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
           ),
         ),
         SizedBox(height: AppSizes.lg),
-        
+
         _buildDrugNameAutocomplete(),
       ],
     );
@@ -67,7 +67,7 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
           ),
           onChanged: _onDrugNameChanged,
         ),
-        
+
         if (_filteredSuggestions.isNotEmpty) ...[
           SizedBox(height: AppSizes.sm),
           Container(
@@ -86,11 +86,13 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
                   dense: true,
                   title: Text(suggestion, style: AppTextStyles.bodySmall),
                   onTap: () async {
-                    setState(() {
-                      widget.drugNameController.text = suggestion;
-                      _filteredSuggestions = [];
-                    });
-                    
+                    if (mounted) {
+                      setState(() {
+                        widget.drugNameController.text = suggestion;
+                        _filteredSuggestions = [];
+                      });
+                    }
+
                     // 약 상세 정보 가져오기
                     await _loadDrugDetails(suggestion);
                   },
@@ -105,27 +107,35 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
 
   void _onDrugNameChanged(String value) async {
     if (value.length >= 2) {
-      setState(() {
-        _isLoadingSuggestions = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingSuggestions = true;
+        });
+      }
 
       try {
         final suggestions = await DrugSearchService.searchDrugNames(value);
-        setState(() {
-          _filteredSuggestions = suggestions.take(5).toList();
-          _isLoadingSuggestions = false;
-        });
+        if (mounted) {
+          setState(() {
+            _filteredSuggestions = suggestions.take(5).toList();
+            _isLoadingSuggestions = false;
+          });
+        }
       } catch (e) {
+        if (mounted) {
+          setState(() {
+            _filteredSuggestions = [];
+            _isLoadingSuggestions = false;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
         setState(() {
           _filteredSuggestions = [];
           _isLoadingSuggestions = false;
         });
       }
-    } else {
-      setState(() {
-        _filteredSuggestions = [];
-        _isLoadingSuggestions = false;
-      });
     }
   }
 
@@ -135,9 +145,9 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
       if (details != null) {
         final manufacturer = details['entpName'] ?? '-';
         final ingredient = details['efcyQesitm'] ?? '-';
-        
+
         widget.onDrugDetailsLoaded('$manufacturer|$ingredient');
-        
+
         print('약 상세 정보 로드됨: 제조사=$manufacturer, 성분=$ingredient');
       }
     } catch (e) {

@@ -26,37 +26,38 @@ class Step1InputMethodWidget extends StatelessWidget {
           ),
         ),
         SizedBox(height: AppSizes.lg),
-        
-        _buildInputMethodOption(
-          '이미지 등록',
-          '약품 사진을 촬영하여 등록',
-          Icons.camera_alt,
-        ),
+
+        _buildInputMethodOption('이미지 등록', '약품 사진을 촬영하여 등록', Icons.camera_alt),
         SizedBox(height: AppSizes.md),
-        
-        _buildInputMethodOption(
-          '직접 입력',
-          '약품명을 직접 입력하여 등록',
-          Icons.edit,
-        ),
+
+        _buildInputMethodOption('직접 입력', '약품명을 직접 입력하여 등록', Icons.edit),
       ],
     );
   }
 
   Widget _buildInputMethodOption(String title, String subtitle, IconData icon) {
     final isSelected = selectedInputMethod == title;
-    
+
     return GestureDetector(
       onTap: () => onInputMethodChanged(title),
       child: Container(
         padding: EdgeInsets.all(AppSizes.lg),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryLight : AppColors.surface,
+          color: isSelected ? Colors.white : AppColors.surface,
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.border,
             width: isSelected ? 2 : 1,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Row(
           children: [
@@ -80,7 +81,9 @@ class Step1InputMethodWidget extends StatelessWidget {
                   Text(
                     title,
                     style: AppTextStyles.bodyLarge.copyWith(
-                      color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

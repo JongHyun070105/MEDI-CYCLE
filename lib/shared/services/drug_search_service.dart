@@ -3,11 +3,9 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 class DrugSearchService {
-  // 식약처 의약품개요정보 API - 사용자 제공 디코딩된 API 키
-  static const String _apiKey =
-      'CgA5Gg6+IBegRO7e6yDm+e9lqRF1q4js0MPufNUGfQrryUHcnpHe06e5OrepUHd/wwjReDw2+UST3NWFbX44Ew==';
-  static const String _baseUrl =
-      'http://apis.data.go.kr/1471000/DrbEasyDrugInfoService';
+  // Use Cloudflare Worker proxy to protect API keys
+  static const String _workerBaseUrl =
+      'https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev';
 
   /// 의약품명으로 검색하여 자동완성 제안 목록을 반환
   static Future<List<String>> searchDrugNames(String query) async {
@@ -16,12 +14,9 @@ class DrugSearchService {
     }
 
     try {
-      // API 키 URL 인코딩
-      final encodedApiKey = Uri.encodeComponent(_apiKey);
-
-      // API 호출 - XML 형식으로 요청 (기본값)
+      // Call Cloudflare Worker proxy (XML passthrough)
       final url =
-          '$_baseUrl/getDrbEasyDrugList?serviceKey=$encodedApiKey&itemName=$query&pageNo=1&numOfRows=50';
+          '$_workerBaseUrl/drug-search?itemName=${Uri.encodeComponent(query)}&pageNo=1&numOfRows=50';
       print('API 요청 URL: $url');
 
       final response = await http.get(
@@ -80,10 +75,8 @@ class DrugSearchService {
   /// 의약품 상세 정보 조회
   static Future<Map<String, dynamic>?> getDrugDetails(String drugName) async {
     try {
-      final encodedApiKey = Uri.encodeComponent(_apiKey);
-      final encodedDrugName = Uri.encodeComponent(drugName);
       final url =
-          '$_baseUrl/getDrbEasyDrugList?serviceKey=$encodedApiKey&itemName=$encodedDrugName&numOfRows=1';
+          '$_workerBaseUrl/drug-detail?itemName=${Uri.encodeComponent(drugName)}';
 
       print('약 상세 정보 API 요청 URL: $url');
 

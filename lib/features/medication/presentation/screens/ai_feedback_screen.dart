@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+// Open file is optional; fallback to no-op if unavailable
+import '../../../../shared/services/api_client.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
@@ -297,17 +302,48 @@ class _MonthlyTab extends StatelessWidget {
   void _showReportGenerated(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('의사 상담용 리포트가 생성되었습니다!'),
+        content: const Text('의사 상담용 리포트를 생성 중입니다...'),
         backgroundColor: AppColors.primary,
-        action: SnackBarAction(
-          label: '보기',
-          textColor: Colors.white,
-          onPressed: () {
-            // TODO: 리포트 보기 기능
-          },
-        ),
       ),
     );
+    _downloadAndOpenReport(context);
+  }
+
+  Future<void> _downloadAndOpenReport(BuildContext context) async {
+    try {
+      final uri = Uri.parse('http://localhost:3000/api/medications/report/pdf');
+      final client = HttpClient();
+      final req = await client.getUrl(uri);
+      final token = await ApiClient().getToken();
+      if (token != null) {
+        req.headers.set('Authorization', 'Bearer $token');
+      }
+      final resp = await req.close();
+      if (resp.statusCode != 200) {
+        throw Exception('다운로드 실패(${resp.statusCode})');
+      }
+
+      final bytes = await consolidateHttpClientResponseBytes(resp);
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/medicycle_report.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+
+      // Try to open via platform channel if available; otherwise just notify path
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('리포트 저장됨: ${file.path}'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('리포트 열기 실패: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 

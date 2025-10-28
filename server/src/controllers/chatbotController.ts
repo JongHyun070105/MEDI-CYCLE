@@ -60,6 +60,7 @@ const generateMedicalAdviceDirectly = async (
         body: JSON.stringify({
           contents: [
             {
+              role: "user",
               parts: [
                 {
                   text: `${systemPrompt}\n\n사용자 질문: ${userQuestion}`,
@@ -224,11 +225,41 @@ export const sendChatMessage = async (req: Request, res: Response) => {
       }
     }
 
-    // Gemini API로 응답 생성
+    // 직전 대화 히스토리(최근 5개) 추출
+    const history = await query(
+      `SELECT role, content FROM chat_messages WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`,
+      [userId]
+    );
+    const historyText = history.rows
+      .reverse()
+      .map((r: any) => `${r.role === "user" ? "사용자" : "AI"}: ${r.content}`)
+      .join("\n");
+
+    const enrichedDrugInfo = historyText
+      ? `${drugInfo}\n\n이전 대화:\n${historyText}`
+      : drugInfo;
+
+    // Gemini API로 응답 생성 (간단한 재시도 2회)
     console.log("🤖 Generating AI response...");
-    const aiResponse = GEMINI_API_KEY
-      ? await generateMedicalAdviceDirectly(content, userInfo, drugInfo)
-      : await generateMedicalAdvice(content, userInfo, drugInfo);
+    let aiResponse = "";
+    const attempts = GEMINI_API_KEY ? [1, 2] : [1, 2];
+    for (const _ of attempts) {
+      aiResponse = GEMINI_API_KEY
+        ? await generateMedicalAdviceDirectly(
+            content,
+            userInfo,
+            enrichedDrugInfo
+          )
+        : await generateMedicalAdvice(content, userInfo, enrichedDrugInfo);
+      if (
+        aiResponse &&
+        aiResponse.trim().length > 0 &&
+        !aiResponse.startsWith("AI 응답을 생성할 수 없습니다")
+      ) {
+        break;
+      }
+      console.warn("⚠️  AI 응답 재시도");
+    }
     console.log(
       "✅ AI response generated:",
       aiResponse.substring(0, 50) + "..."

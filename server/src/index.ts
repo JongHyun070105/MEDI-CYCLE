@@ -26,8 +26,36 @@ app.use((req: Request, res: Response, next) => {
   const timestamp = new Date().toISOString();
   console.log(`\n[${timestamp}] 📨 ${req.method} ${req.path}`);
   console.log(`   Remote: ${req.ip || "unknown"}`);
-  if (Object.keys(req.body).length > 0) {
-    console.log(`   Body:`, JSON.stringify(req.body, null, 2));
+
+  // Redact sensitive headers
+  const redactedHeaders: Record<string, unknown> = { ...req.headers };
+  if (redactedHeaders["authorization"])
+    redactedHeaders["authorization"] = "***";
+
+  // Redact sensitive fields in body
+  const redactKeys = new Set([
+    "password",
+    "newPassword",
+    "token",
+    "access_token",
+    "refresh_token",
+    "apiKey",
+    "apikey",
+  ]);
+  const redactObject = (obj: any): any => {
+    if (!obj || typeof obj !== "object") return obj;
+    if (Array.isArray(obj)) return obj.map(redactObject);
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = redactKeys.has(k) ? "***" : redactObject(v as any);
+    }
+    return out;
+  };
+
+  const hasBody = req.body && Object.keys(req.body).length > 0;
+  if (hasBody) {
+    console.log(`   Headers:`, JSON.stringify(redactedHeaders, null, 2));
+    console.log(`   Body:`, JSON.stringify(redactObject(req.body), null, 2));
   }
   next();
 });

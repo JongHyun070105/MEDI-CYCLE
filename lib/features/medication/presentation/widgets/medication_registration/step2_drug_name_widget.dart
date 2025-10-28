@@ -3,6 +3,9 @@ import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_sizes.dart';
 import '../../../../../core/constants/app_text_styles.dart';
 import '../../../../../shared/services/drug_search_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../../../../../shared/services/ocr_service.dart';
 
 class Step2DrugNameWidget extends StatefulWidget {
   final TextEditingController drugNameController;
@@ -37,6 +40,34 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
         SizedBox(height: AppSizes.lg),
 
         _buildDrugNameAutocomplete(),
+
+        SizedBox(height: AppSizes.md),
+        Wrap(
+          spacing: AppSizes.sm,
+          runSpacing: AppSizes.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _pickAndOcr,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('라벨 OCR로 채우기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(
+                '사진의 약 라벨/상자를 촬영해 약명을 추출합니다.',
+                softWrap: true,
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -153,6 +184,35 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
     } catch (e) {
       print('약 상세 정보 로드 실패: $e');
       widget.onDrugDetailsLoaded('-|-');
+    }
+  }
+
+  Future<void> _pickAndOcr() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      final text = await ocrService.extractText(File(picked.path));
+      final candidates = await ocrService.extractCandidateDrugNames(text);
+      if (candidates.isNotEmpty && mounted) {
+        setState(() {
+          widget.drugNameController.text = candidates.first;
+        });
+        await _loadDrugDetails(candidates.first);
+      } else if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('텍스트에서 약명을 찾지 못했습니다.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('OCR 실패: $e')));
+      }
     }
   }
 }

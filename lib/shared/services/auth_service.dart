@@ -9,7 +9,7 @@ class AuthService {
     try {
       // 1. 회원가입 요청
       final signupResponse = await _apiService.post<Map<String, dynamic>>(
-        '/auth/signup',
+        '/api/auth/register',
         data: request.toJson(),
       );
 
@@ -29,7 +29,7 @@ class AuthService {
     try {
       print('🔍 AuthService.login 시작');
       final response = await _apiService.post<Map<String, dynamic>>(
-        '/auth/login',
+        '/api/auth/login',
         data: request.toJson(),
       );
 
@@ -40,15 +40,23 @@ class AuthService {
         print('❌ AuthService.login: 응답 데이터가 null입니다!');
         throw Exception('로그인 응답 데이터가 null입니다.');
       }
+      final Map<String, dynamic> data = response.data!;
+      final String? token = (data['token'] ?? data['access_token'])?.toString();
+      if (token == null || token.isEmpty) {
+        throw Exception('로그인 응답에 토큰이 없습니다.');
+      }
+      final Map<String, dynamic> userJson =
+          (data['user'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+      final user = User.fromJson(userJson);
 
-      print('🔍 AuthResponse.fromJson 호출 전');
-      final authResponse = AuthResponse.fromJson(response.data!);
-      print('🔍 AuthResponse.fromJson 성공: $authResponse');
-
-      // 토큰 저장
-      _apiService.setToken(authResponse.accessToken);
+      // 토큰 저장 및 AuthResponse 구성
+      _apiService.setToken(token);
+      final authResponse = AuthResponse(
+        accessToken: token,
+        tokenType: 'Bearer',
+        user: user,
+      );
       print('🔍 AuthService.login 완료');
-
       return authResponse;
     } catch (e) {
       print('❌ AuthService.login 오류: $e');
@@ -60,7 +68,9 @@ class AuthService {
   /// 내 정보 조회
   Future<User> getMe() async {
     try {
-      final response = await _apiService.get<Map<String, dynamic>>('/auth/me');
+      final response = await _apiService.get<Map<String, dynamic>>(
+        '/api/auth/profile',
+      );
       return User.fromJson(response.data!);
     } catch (e) {
       throw Exception('사용자 정보 조회 중 오류가 발생했습니다: $e');

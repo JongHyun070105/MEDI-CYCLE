@@ -10,6 +10,7 @@ import 'medication_box_screen.dart';
 import 'ai_feedback_screen.dart';
 import 'chatbot_screen.dart';
 import '../../../auth/presentation/screens/settings_screen.dart';
+import '../../../../shared/services/api_client.dart';
 
 class MedicationHomeScreen extends ConsumerStatefulWidget {
   const MedicationHomeScreen({super.key});
@@ -176,6 +177,27 @@ class _HomeTab extends StatelessWidget {
           const MedicationStats(),
 
           const SizedBox(height: AppSizes.lg),
+          Row(
+            children: [
+              Icon(
+                Icons.stacked_line_chart,
+                color: AppColors.textPrimary,
+                size: 20,
+              ),
+              const SizedBox(width: AppSizes.sm),
+              Text(
+                '월별 복용률',
+                style: AppTextStyles.h5.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSizes.md),
+          const _MonthlyAdherenceChart(),
+
+          const SizedBox(height: AppSizes.lg),
 
           // 오늘의 복약 현황
           Row(
@@ -204,16 +226,14 @@ class _HomeTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               border: Border.all(color: AppColors.border, width: 1.5),
             ),
-            child: Column(
-              children: [
-                _MedicationItem(name: '혈압약', time: '오전 08:00', isTaken: true),
-                _buildDivider(),
-                _MedicationItem(name: '당뇨약', time: '오후 12:10', isTaken: true),
-                _buildDivider(),
-                _MedicationItem(name: '소화제', time: '오후 05:30', isTaken: true),
-                _buildDivider(),
-                _MedicationItem(name: '수면제', time: '오후 10:50', isTaken: false),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(AppSizes.md),
+              child: Text(
+                '등록된 복약 체크 항목이 없습니다.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ),
           ),
           // FAB 버튼이 가리는 것을 방지하기 위한 하단 패딩
@@ -232,27 +252,8 @@ class _MedicationTab extends StatefulWidget {
 }
 
 class _MedicationTabState extends State<_MedicationTab> {
-  // 더미 데이터 - 실제로는 상태 관리에서 가져와야 함
-  final List<Map<String, dynamic>> _registeredMedications = [
-    {
-      'name': '아스피린',
-      'manufacturer': '바이엘',
-      'dosage': '1정',
-      'frequency': '하루 3회',
-      'times': ['08:00', '12:00', '18:00'],
-      'startDate': '2024-01-15',
-      'endDate': '2024-01-22',
-    },
-    {
-      'name': '타이레놀',
-      'manufacturer': '한국얀센',
-      'dosage': '2정',
-      'frequency': '하루 2회',
-      'times': ['09:00', '21:00'],
-      'startDate': '2024-01-16',
-      'endDate': '2024-01-23',
-    },
-  ];
+  // 실제 데이터는 등록 시(onMedicationAdded) 추가됨
+  final List<Map<String, dynamic>> _registeredMedications = [];
 
   void addMedication(Map<String, dynamic> medication) {
     setState(() {
@@ -808,4 +809,143 @@ Widget _buildDivider() {
     margin: const EdgeInsets.symmetric(horizontal: AppSizes.md),
     color: AppColors.border,
   );
+}
+
+class _MonthlyAdherenceChart extends StatefulWidget {
+  const _MonthlyAdherenceChart();
+
+  @override
+  State<_MonthlyAdherenceChart> createState() => _MonthlyAdherenceChartState();
+}
+
+class _MonthlyAdherenceChartState extends State<_MonthlyAdherenceChart> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _months = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final api = ApiClient();
+      final data = await api.getMonthlyAdherenceStats();
+      final list = List<Map<String, dynamic>>.from(data['months'] ?? []);
+      if (mounted) {
+        setState(() {
+          _months = list.reversed.toList();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _months = const [];
+        });
+      }
+    }
+  }
+
+  double _toPercent01(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return (value.toDouble() / 100.0).clamp(0.0, 1.0);
+    final String s = value.toString();
+    final double? parsed = double.tryParse(s);
+    if (parsed == null) return 0.0;
+    return (parsed / 100.0).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_months.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSizes.lg),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          border: Border.all(color: AppColors.border, width: 1.5),
+        ),
+        child: Text(
+          '표시할 월별 데이터가 없습니다.',
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: _months
+                .map(
+                  (m) => Expanded(
+                    child: Column(
+                      children: [
+                        _Bar(percent: _toPercent01(m['adherence_pct'])),
+                        const SizedBox(height: AppSizes.sm),
+                        Text(
+                          (m['month'] ?? '').toString().substring(5),
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  final double percent; // 0.0 ~ 1.0
+  const _Bar({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final double clamped = percent.clamp(0.0, 1.0);
+    return Container(
+      height: 120,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(color: AppColors.border, width: 1),
+          right: BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          height: 120 * clamped,
+          width: 12,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ),
+    );
+  }
 }

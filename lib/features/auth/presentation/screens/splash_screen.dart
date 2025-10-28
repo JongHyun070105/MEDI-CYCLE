@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../../shared/services/api_client.dart';
+import '../../../../shared/services/api_service.dart';
 import '../controllers/splash_controller.dart';
 import '../controllers/auth_controller.dart';
 import 'login_screen.dart';
@@ -68,20 +68,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await splashController.checkNetworkConnection();
 
     if (mounted) {
-      // 저장된 토큰 확인
-      final apiClient = ApiClient();
-      final token = await apiClient.getToken();
-
-      if (token != null && token.isNotEmpty) {
-        // 토큰이 있으면 프로필 로드 후 홈 화면으로 이동
-        final authController = ref.read(authControllerProvider.notifier);
-        await authController.loadUserProfile();
-
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MedicationHomeScreen()),
-        );
+      // 메모리 토큰 기준으로만 자동 로그인 시도 (없으면 로그인 화면)
+      final hasToken = apiService.isLoggedIn;
+      if (hasToken) {
+        try {
+          final authController = ref.read(authControllerProvider.notifier);
+          await authController.loadUserProfile();
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const MedicationHomeScreen(),
+            ),
+          );
+        } catch (_) {
+          // 토큰이 유효하지 않으면 로그인 화면으로
+          await ref.read(authControllerProvider.notifier).logout();
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
+        }
       } else {
-        // 토큰이 없으면 로그인 화면으로 이동
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
         );

@@ -83,7 +83,6 @@ class _NearbyDisposalTab extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: double.infinity,
         padding: const EdgeInsets.all(AppSizes.md),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -97,84 +96,75 @@ class _NearbyDisposalTab extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSizes.sm,
-                    vertical: AppSizes.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                  ),
-                  child: Text(
-                    type,
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppSizes.radiusRound),
+              ),
+              child: Icon(
+                type == '병원'
+                    ? Icons.local_hospital
+                    : type == '약국'
+                    ? Icons.local_pharmacy
+                    : Icons.health_and_safety,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: AppSizes.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                const Spacer(),
-                Text(
-                  distance,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: AppSizes.xs),
+                  Text(
+                    '$type · $address',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSizes.sm),
-            Text(
-              name,
-              style: AppTextStyles.bodyLarge.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
+                  const SizedBox(height: AppSizes.xs),
+                  Text(
+                    '$distance · $time',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: AppSizes.xs),
-            Text(
-              address,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSizes.xs),
-            Text(
-              time,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
+            Icon(Icons.directions, color: AppColors.primary),
           ],
         ),
       ),
     );
   }
 
-  void _showRouteDialog(BuildContext context, String locationName) {
+  void _showRouteDialog(BuildContext context, String name) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
-          title: Text('경로 안내'),
-          content: Text('$locationName으로 경로를 안내하시겠습니까?'),
+          title: Text('$name 경로 안내'),
+          content: const Text('지도에서 경로를 확인하세요.'),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('취소'),
+            ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$locationName으로 경로 안내를 시작합니다'),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
-              },
+              onPressed: () => Navigator.of(context).pop(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -199,11 +189,11 @@ class _MapViewTab extends StatelessWidget {
         AppSizes.md,
         AppSizes.md,
         AppSizes.md,
-        200, // 하단 레전드 공간 확보
+        200,
       ),
       child: Column(
         children: [
-          // 지도 영역
+          // Kakao Map placeholder (will be replaced with WebView once key provided)
           Container(
             width: double.infinity,
             height: 400,
@@ -219,17 +209,9 @@ class _MapViewTab extends StatelessWidget {
                   Icon(Icons.map, size: 48, color: AppColors.textSecondary),
                   SizedBox(height: AppSizes.sm),
                   Text(
-                    'Google Maps',
+                    '카카오맵 API Key 등록 후 지도가 표시됩니다',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  Text(
-                    '(실제 구현 시 Google Maps 위젯 사용)',
-                    style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: AppColors.textSecondary,
                     ),
                   ),

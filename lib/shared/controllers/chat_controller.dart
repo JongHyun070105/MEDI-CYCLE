@@ -1,137 +1,123 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
-import '../services/ai_service.dart';
+import '../services/api_client.dart';
 
-part 'chat_controller.freezed.dart';
+class ChatMessage {
+  final String id;
+  final String content;
+  final bool isUser;
+  final DateTime timestamp;
+  final String? source;
 
-@freezed
-class ChatMessage with _$ChatMessage {
-  const factory ChatMessage({
-    required String id,
-    required String content,
-    required bool isUser,
-    required DateTime timestamp,
-    String? source,
-  }) = _ChatMessage;
+  ChatMessage({
+    required this.id,
+    required this.content,
+    required this.isUser,
+    required this.timestamp,
+    this.source,
+  });
 }
 
-@freezed
-class ChatState with _$ChatState {
-  const factory ChatState({
-    @Default([]) List<ChatMessage> messages,
-    @Default(false) bool isLoading,
-    @Default(false) bool hasError,
-    String? errorMessage,
-  }) = _ChatState;
+class ChatState {
+  final bool isLoading;
+  final List<ChatMessage> messages;
+
+  const ChatState({required this.isLoading, required this.messages});
+
+  ChatState copyWith({bool? isLoading, List<ChatMessage>? messages}) =>
+      ChatState(
+        isLoading: isLoading ?? this.isLoading,
+        messages: messages ?? this.messages,
+      );
 }
 
 class ChatController extends StateNotifier<ChatState> {
-  final AiService _aiService = aiService;
+  final ApiClient _api = ApiClient();
 
-  ChatController() : super(const ChatState());
+  ChatController() : super(const ChatState(isLoading: false, messages: []));
 
-  /// 일반 대화 메시지 전송
-  Future<void> sendMessage(String message) async {
-    if (message.trim().isEmpty) return;
+  Future<void> loadHistory() async {
+    try {
+      state = state.copyWith(isLoading: true);
+      final data = await _api.getChatHistory();
+      final list = List<Map<String, dynamic>>.from(data['messages'] ?? []);
+      final messages = list.map((m) {
+        final role = (m['role'] ?? '').toString();
+        final content = (m['content'] ?? '').toString();
+        final createdAt =
+            (m['created_at'] ??
+                    m['createdAt'] ??
+                    DateTime.now().toIso8601String())
+                .toString();
+        return ChatMessage(
+          id: (m['id'] ?? '').toString(),
+          content: content,
+          isUser: role == 'user',
+          timestamp: DateTime.tryParse(createdAt) ?? DateTime.now(),
+        );
+      }).toList();
+      state = state.copyWith(isLoading: false, messages: messages);
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
 
-    // 사용자 메시지 추가
-    final userMessage = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      content: message.trim(),
+  Future<void> sendMessage(String content) async {
+    final userMsg = ChatMessage(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      content: content,
       isUser: true,
       timestamp: DateTime.now(),
     );
-
     state = state.copyWith(
-      messages: [...state.messages, userMessage],
+      messages: [...state.messages, userMsg],
       isLoading: true,
-      hasError: false,
-      errorMessage: null,
     );
 
     try {
-      final response = await _aiService.sendMessage(message);
-
-      // AI 응답 메시지 추가
-      final aiMessage = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: response,
+      final resp = await _api.sendChatMessage(content: content);
+      final ai = resp['aiMessage'] as Map<String, dynamic>?;
+      final aiContent =
+          (ai != null ? ai['content'] : resp['content'])?.toString() ??
+          '응답을 생성할 수 없습니다.';
+      final aiCreatedAt =
+          (ai != null ? (ai['createdAt'] ?? ai['created_at']) : null)
+              ?.toString();
+      final aiId =
+          (ai != null
+                  ? ai['id']
+                  : 'local-ai-${DateTime.now().microsecondsSinceEpoch}')
+              .toString();
+      final botMsg = ChatMessage(
+        id: aiId,
+        content: aiContent,
         isUser: false,
-        timestamp: DateTime.now(),
-        source: 'gemini',
+        timestamp: aiCreatedAt != null
+            ? (DateTime.tryParse(aiCreatedAt) ?? DateTime.now())
+            : DateTime.now(),
       );
-
       state = state.copyWith(
-        messages: [...state.messages, aiMessage],
+        messages: [...state.messages, botMsg],
         isLoading: false,
       );
     } catch (e) {
+      final botMsg = ChatMessage(
+        id: 'err-${DateTime.now().microsecondsSinceEpoch}',
+        content: 'AI 응답 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        isUser: false,
+        timestamp: DateTime.now(),
+      );
       state = state.copyWith(
+        messages: [...state.messages, botMsg],
         isLoading: false,
-        hasError: true,
-        errorMessage: e.toString(),
       );
     }
   }
 
-  /// 의약품 정보 질문
-  Future<void> askAboutMedication(
-    String medicationName, {
-    String? question,
-  }) async {
-    final message = question ?? '$medicationName에 대해 알려주세요';
-
-    // 사용자 메시지 추가
-    final userMessage = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      content: message,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
-    state = state.copyWith(
-      messages: [...state.messages, userMessage],
-      isLoading: true,
-      hasError: false,
-      errorMessage: null,
-    );
-
+  Future<void> clearMessages() async {
     try {
-      final response = await _aiService.askAboutMedication(
-        medicationName,
-        question: question,
-      );
-
-      // AI 응답 메시지 추가
-      final aiMessage = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        content: response,
-        isUser: false,
-        timestamp: DateTime.now(),
-        source: 'mixed',
-      );
-
-      state = state.copyWith(
-        messages: [...state.messages, aiMessage],
-        isLoading: false,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        hasError: true,
-        errorMessage: e.toString(),
-      );
-    }
-  }
-
-  /// 채팅 기록 초기화
-  void clearMessages() {
-    state = state.copyWith(messages: [], hasError: false, errorMessage: null);
-  }
-
-  /// 에러 상태 초기화
-  void clearError() {
-    state = state.copyWith(hasError: false, errorMessage: null);
+      await _api.deleteChatHistory();
+    } catch (_) {}
+    state = state.copyWith(messages: []);
   }
 }
 

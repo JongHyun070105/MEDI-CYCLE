@@ -2,54 +2,62 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  static const String baseUrl = 'http://127.0.0.1:3000';
   late final Dio _dio;
   String? _token;
 
   ApiService() {
-    _dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    ));
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ),
+    );
 
     // 요청 인터셉터 - 토큰 자동 추가
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) {
-        if (_token != null) {
-          options.headers['Authorization'] = 'Bearer $_token';
-        }
-        if (kDebugMode) {
-          print('🚀 API Request: ${options.method} ${options.uri}');
-          print('📦 Headers: ${options.headers}');
-          if (options.data != null) {
-            print('📋 Data: ${options.data}');
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (_token != null) {
+            options.headers['Authorization'] = 'Bearer $_token';
           }
-        }
-        handler.next(options);
-      },
-      onResponse: (response, handler) {
-        if (kDebugMode) {
-          print('✅ API Response: ${response.statusCode} ${response.requestOptions.uri}');
-          print('📄 Data: ${response.data}');
-        }
-        handler.next(response);
-      },
-      onError: (error, handler) {
-        if (kDebugMode) {
-          print('❌ API Error: ${error.response?.statusCode} ${error.requestOptions.uri}');
-          print('💥 Error: ${error.message}');
-          if (error.response?.data != null) {
-            print('📄 Error Data: ${error.response?.data}');
+          if (kDebugMode) {
+            print('🚀 API Request: ${options.method} ${options.uri}');
+            print('📦 Headers: ${options.headers}');
+            if (options.data != null) {
+              print('📋 Data: ${options.data}');
+            }
           }
-        }
-        handler.next(error);
-      },
-    ));
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          if (kDebugMode) {
+            print(
+              '✅ API Response: ${response.statusCode} ${response.requestOptions.uri}',
+            );
+            print('📄 Data: ${response.data}');
+          }
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          if (kDebugMode) {
+            print(
+              '❌ API Error: ${error.response?.statusCode} ${error.requestOptions.uri}',
+            );
+            print('💥 Error: ${error.message}');
+            if (error.response?.data != null) {
+              print('📄 Error Data: ${error.response?.data}');
+            }
+          }
+          handler.next(error);
+        },
+      ),
+    );
   }
 
   // 토큰 설정
@@ -155,9 +163,23 @@ class ApiService {
         return ApiException('연결 시간이 초과되었습니다.', 408);
       case DioExceptionType.badResponse:
         final statusCode = error.response?.statusCode ?? 500;
-        final message = error.response?.data?['detail'] ?? 
-                       error.response?.data?['message'] ?? 
-                       '서버 오류가 발생했습니다.';
+        final data = error.response?.data;
+        String message = '서버 오류가 발생했습니다.';
+        if (data is Map<String, dynamic>) {
+          message =
+              (data['error'] ?? data['detail'] ?? data['message'] ?? message)
+                  .toString();
+        } else if (data is String && data.isNotEmpty) {
+          message = data;
+        }
+        // 사용자 친화적 메시지 매핑
+        if (statusCode == 400 && message.contains('이미 등록된')) {
+          message = '이미 존재하는 이메일입니다.';
+        } else if (statusCode == 401) {
+          message = '인증이 필요합니다. 다시 로그인해주세요.';
+        } else if (statusCode == 404) {
+          message = '요청하신 자원을 찾을 수 없습니다.';
+        }
         return ApiException(message, statusCode);
       case DioExceptionType.cancel:
         return ApiException('요청이 취소되었습니다.', -1);

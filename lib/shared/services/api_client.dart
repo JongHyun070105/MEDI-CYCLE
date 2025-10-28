@@ -343,4 +343,26 @@ class ApiClient {
       rethrow;
     }
   }
+
+  // 월별 복용률 집계 조회
+  Future<Map<String, dynamic>> getMonthlyAdherenceStats() async {
+    try {
+      final response = await dio.get(
+        '/api/medications/stats/adherence/monthly',
+      );
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // 건강 인사이트 조회
+  Future<Map<String, dynamic>> getHealthInsights() async {
+    try {
+      final response = await dio.get('/api/medications/stats/insights');
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

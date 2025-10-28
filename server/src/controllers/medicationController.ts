@@ -26,6 +26,48 @@ export const registerMedication = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "필수 정보가 누락되었습니다" });
     }
 
+    // Validation: types and consistency
+    const times: unknown[] = Array.isArray(dosage_times) ? dosage_times : [];
+    const relations: unknown[] = Array.isArray(meal_relations)
+      ? meal_relations
+      : [];
+    const offsets: unknown[] = Array.isArray(meal_offsets) ? meal_offsets : [];
+
+    if (typeof frequency !== "number" || frequency <= 0) {
+      return res
+        .status(400)
+        .json({ error: "frequency는 양의 정수여야 합니다" });
+    }
+    if (times.length !== frequency) {
+      return res
+        .status(400)
+        .json({ error: "dosage_times의 길이가 frequency와 일치해야 합니다" });
+    }
+    if (relations.length && relations.length !== frequency) {
+      return res
+        .status(400)
+        .json({ error: "meal_relations의 길이가 frequency와 일치해야 합니다" });
+    }
+    if (offsets.length && offsets.length !== frequency) {
+      return res
+        .status(400)
+        .json({ error: "meal_offsets의 길이가 frequency와 일치해야 합니다" });
+    }
+    if (drug_name.length > 255) {
+      return res
+        .status(400)
+        .json({ error: "drug_name이 너무 깁니다(최대 255자)" });
+    }
+
+    // Validate date format (ISO YYYY-MM-DD allowed)
+    const startOk = /^\d{4}-\d{2}-\d{2}$/.test(start_date);
+    const endOk = !end_date || /^\d{4}-\d{2}-\d{2}$/.test(end_date);
+    if (!startOk || !endOk) {
+      return res
+        .status(400)
+        .json({ error: "날짜 형식이 잘못되었습니다(YYYY-MM-DD)" });
+    }
+
     const result = await query(
       `INSERT INTO medications 
        (user_id, drug_name, manufacturer, ingredient, frequency, dosage_times, meal_relations, meal_offsets, start_date, end_date, is_indefinite) 

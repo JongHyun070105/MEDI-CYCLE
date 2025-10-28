@@ -2,16 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AddressSearchService {
-  static const String _baseUrl =
-      'https://business.juso.go.kr/addrlink/addrLinkApi.do';
-  static const String _confmKey =
-      'devU01TX0FVVEgyMDI1MDkxMDE3MzcxMTExNjE2ODI='; // 약드셔유 실제 승인키
+  // Use Cloudflare Worker proxy to protect API keys
+  static const String _workerBaseUrl =
+      'https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev';
 
   static Future<List<AddressResult>> searchAddress(String query) async {
     try {
       final response = await http.get(
         Uri.parse(
-          '$_baseUrl?confmKey=$_confmKey&currentPage=1&countPerPage=10&keyword=$query&resultType=json',
+          '$_workerBaseUrl/address-search?keyword=${Uri.encodeComponent(query)}',
         ),
       );
 

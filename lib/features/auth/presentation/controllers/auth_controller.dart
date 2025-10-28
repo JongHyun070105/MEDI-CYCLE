@@ -152,6 +152,17 @@ class AuthController extends StateNotifier<AuthState> {
       }
     }
   }
+
+  /// 프로필 로드 (자동로그인 이후 사용자 정보 동기화)
+  Future<void> loadUserProfile() async {
+    try {
+      final user = await _authService.getMe();
+      state = state.copyWith(isAuthenticated: true, user: user);
+    } catch (e) {
+      // 토큰 오류 등은 무시하고 상태만 정리
+      state = state.copyWith(hasError: true, errorMessage: e.toString());
+    }
+  }
 }
 
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(

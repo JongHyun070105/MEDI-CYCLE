@@ -38,6 +38,16 @@ export default {
         return handleAddressCallback(request);
       }
 
+      // Drug search (MFDS DrbEasyDrugInfoService - autocomplete)
+      if (pathname === "/drug-search") {
+        return handleDrugSearch(request, env);
+      }
+
+      // Drug detail (MFDS DrbEasyDrugInfoService - single item)
+      if (pathname === "/drug-detail") {
+        return handleDrugDetail(request, env);
+      }
+
       // Backend proxy for all other routes
       const backendUrl = new URL(
         pathname + url.search,
@@ -59,6 +69,17 @@ export default {
             ? request.body
             : undefined,
       });
+
+      // simple health check
+      if (pathname === "/__health") {
+        return new Response(JSON.stringify({ ok: true, ts: Date.now() }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
 
       const response = await fetch(proxyRequest);
       const responseText = await response.text();
@@ -129,6 +150,7 @@ async function handleGeminiProxyV2(
       body: JSON.stringify({
         contents: [
           {
+            role: "user",
             parts: [
               {
                 text: `${systemPrompt}\n\n사용자 질문: ${userQuestion}`,
@@ -204,6 +226,8 @@ async function handleAddressSearch(
 ): Promise<Response> {
   const url = new URL(request.url);
   const keyword = url.searchParams.get("keyword") || "";
+  const currentPage = url.searchParams.get("currentPage") || "1";
+  const countPerPage = url.searchParams.get("countPerPage") || "10";
 
   if (!keyword) {
     return new Response(
@@ -221,9 +245,13 @@ async function handleAddressSearch(
     );
   }
 
-  const jusoUrl = `https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=${
+  const jusoUrl = `https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=${encodeURIComponent(
     env.ADDRESS_API_KEY
-  }&keyword=${encodeURIComponent(keyword)}&resultType=json`;
+  )}&currentPage=${encodeURIComponent(
+    currentPage
+  )}&countPerPage=${encodeURIComponent(
+    countPerPage
+  )}&keyword=${encodeURIComponent(keyword)}&resultType=json`;
 
   try {
     const jusoResponse = await fetch(jusoUrl);
@@ -276,4 +304,114 @@ function handleAddressCallback(request: Request): Response {
       "Access-Control-Allow-Origin": "*",
     },
   });
+}
+
+// MFDS 의약품 개요 정보 검색 (자동완성용)
+async function handleDrugSearch(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const itemName = url.searchParams.get("itemName") || "";
+  const pageNo = url.searchParams.get("pageNo") || "1";
+  const numOfRows = url.searchParams.get("numOfRows") || "50";
+
+  if (!itemName) {
+    return new Response(
+      JSON.stringify({ success: false, message: "itemName is required" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  const base =
+    "http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
+  const fullUrl = `${base}?serviceKey=${encodeURIComponent(
+    env.EAPIYAK_SERVICE_KEY
+  )}&itemName=${encodeURIComponent(itemName)}&pageNo=${encodeURIComponent(
+    pageNo
+  )}&numOfRows=${encodeURIComponent(numOfRows)}`;
+
+  try {
+    const upstream = await fetch(fullUrl, {
+      headers: {
+        Accept: "application/xml; charset=utf-8",
+        "Content-Type": "application/xml; charset=utf-8",
+      },
+    });
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ success: false, message: "Drug search error" }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+}
+
+// MFDS 의약품 단건 상세
+async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const itemName = url.searchParams.get("itemName") || "";
+
+  if (!itemName) {
+    return new Response(
+      JSON.stringify({ success: false, message: "itemName is required" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  const base =
+    "http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
+  const fullUrl = `${base}?serviceKey=${encodeURIComponent(
+    env.EAPIYAK_SERVICE_KEY
+  )}&itemName=${encodeURIComponent(itemName)}&numOfRows=1`;
+
+  try {
+    const upstream = await fetch(fullUrl, {
+      headers: {
+        Accept: "application/xml; charset=utf-8",
+        "Content-Type": "application/xml; charset=utf-8",
+      },
+    });
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ success: false, message: "Drug detail error" }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
 }

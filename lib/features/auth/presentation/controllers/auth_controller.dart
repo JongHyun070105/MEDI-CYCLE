@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../../../shared/models/user_model.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/api_service.dart';
+import '../../../../shared/services/api_client.dart';
 
 part 'auth_controller.freezed.dart';
 
@@ -44,7 +46,11 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         hasError: true,
-        errorMessage: e.toString(),
+        errorMessage: e is ApiException
+            ? e.message
+            : (e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : '로그인에 실패했습니다. 다시 시도해주세요.'),
       );
     }
   }
@@ -94,7 +100,11 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         hasError: true,
-        errorMessage: e.toString(),
+        errorMessage: e is ApiException
+            ? e.message
+            : (e is Exception
+                  ? e.toString().replaceFirst('Exception: ', '')
+                  : '회원가입에 실패했습니다. 다시 시도해주세요.'),
       );
     }
   }
@@ -154,13 +164,37 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   /// 프로필 로드 (자동로그인 이후 사용자 정보 동기화)
-  Future<void> loadUserProfile() async {
+  Future<bool> loadUserProfile({
+    int? expectedUserId,
+    String? expectedEmail,
+  }) async {
     try {
       final user = await _authService.getMe();
-      state = state.copyWith(isAuthenticated: true, user: user);
+      if ((expectedUserId != null && user.id != expectedUserId) ||
+          (expectedEmail != null && user.email != expectedEmail)) {
+        await _authService.logout();
+        state = state.copyWith(
+          isAuthenticated: false,
+          user: null,
+          hasError: true,
+          errorMessage: '자동 로그인을 다시 진행해주세요.',
+        );
+        return false;
+      }
+
+      try {
+        await ApiClient()
+            .saveUserIdentity(userId: user.id, email: user.email);
+      } catch (_) {}
+
+      state = state.copyWith(isAuthenticated: true, user: user, hasError: false);
+      return true;
     } catch (e) {
-      // 토큰 오류 등은 무시하고 상태만 정리
-      state = state.copyWith(hasError: true, errorMessage: e.toString());
+      state = state.copyWith(
+        hasError: true,
+        errorMessage: '사용자 정보를 불러오지 못했습니다.',
+      );
+      return false;
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../shared/services/medication_service.dart';
+import '../../../../shared/services/api_service.dart';
 import '../widgets/registration_progress_bar.dart';
 import '../widgets/registration_step_content.dart';
 import '../widgets/medication_registration/step1_input_method_widget.dart';
@@ -117,8 +118,8 @@ class _MedicationRegistrationScreenState
         onDrugDetailsLoaded: (details) {
           final parts = details.split('|');
           setState(() {
-            _selectedDrugManufacturer = parts[0];
-            _selectedDrugIngredient = parts[1];
+            _selectedDrugManufacturer = parts.isNotEmpty ? parts[0] : '-';
+            _selectedDrugIngredient = parts.length > 1 ? parts[1] : '-';
           });
         },
       ),
@@ -304,9 +305,11 @@ class _MedicationRegistrationScreenState
         frequency: '하루 $_selectedFrequency회',
         dosageTimes: _dosageTimes.map((timeStr) {
           final parts = timeStr.split(':');
+          final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 12 : 12;
+          final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
           return DateTime.now().copyWith(
-            hour: int.parse(parts[0]),
-            minute: int.parse(parts[1]),
+            hour: hour.clamp(0, 23),
+            minute: minute.clamp(0, 59),
           );
         }).toList(),
         mealRelations: _mealRelations,
@@ -335,33 +338,35 @@ class _MedicationRegistrationScreenState
             : '${_endDate.year}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}',
       };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('약 등록이 완료되었습니다!'),
-          backgroundColor: AppColors.primary,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('약 등록이 완료되었습니다!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
 
-      if (shouldCloseScreen) {
-        Navigator.of(context).pop(registered);
-      } else {
-        _addMedicationToList(registered);
+        if (shouldCloseScreen) {
+          Navigator.of(context).pop(registered);
+        } else {
+          _addMedicationToList(registered);
+        }
       }
       return true;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('약 등록 중 오류가 발생했습니다: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is ApiException ? e.message : '약 등록 중 오류가 발생했습니다.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
       return false;
     }
   }
 
   void _addMedicationToList(Map<String, dynamic> medication) {
-    print('약이 리스트에 추가되었습니다: ${medication['name']}');
-
     if (widget.onMedicationAdded != null) {
       widget.onMedicationAdded!(medication);
     }

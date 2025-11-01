@@ -5,12 +5,13 @@ class PillboxService {
   final ApiService _apiService = apiService;
 
   /// 약상자 상태 조회
-  Future<PillboxStatus> getStatus() async {
+  Future<PillboxStatus?> getStatus() async {
     try {
-      final response = await _apiService.get<Map<String, dynamic>>('/pillbox/status');
+      final response = await _apiService.get<Map<String, dynamic>>('/api/pillbox/status');
+      if (response.data == null) return null;
       return PillboxStatus.fromJson(response.data!);
     } catch (e) {
-      throw Exception('약상자 상태 조회 중 오류가 발생했습니다: $e');
+      return null;
     }
   }
 

@@ -6,7 +6,10 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../shared/controllers/chat_controller.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
-  const ChatbotScreen({super.key});
+  const ChatbotScreen({super.key, this.medicationId, this.medicationName});
+
+  final int? medicationId;
+  final String? medicationName;
 
   @override
   ConsumerState<ChatbotScreen> createState() => _ChatbotScreenState();
@@ -19,11 +22,18 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   @override
   void initState() {
     super.initState();
-    // 초기 환영 메시지 추가
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chatState = ref.read(chatControllerProvider);
-      if (chatState.messages.isEmpty) {
-        // 환영 메시지는 직접 추가하지 않고, 첫 메시지에서 처리
+    // 채팅 이력 로드는 필요시 자동으로 로드됨
+    ref.listen(chatControllerProvider, (previous, next) {
+      if (previous?.messages.length != next.messages.length) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
       }
     });
   }
@@ -35,16 +45,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     super.dispose();
   }
 
-  void _sendMessage() async {
-    final message = _messageController.text.trim();
+  void _sendMessage({String? preset}) async {
+    final String message = (preset ?? _messageController.text).trim();
     if (message.isEmpty) return;
-
     _messageController.clear();
-
     final chatController = ref.read(chatControllerProvider.notifier);
-    await chatController.sendMessage(message);
-
-    // 스크롤을 맨 아래로
+    await chatController.sendMessage(
+      message,
+      medicationId: widget.medicationId,
+    );
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
@@ -52,6 +61,16 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  List<String> _buildSuggestedQuestions() {
+    final String drug = widget.medicationName ?? '이 약';
+    return <String>[
+      '$drug의 주요 효능은 뭐야?',
+      '$drug의 부작용이 뭐야?',
+      '$drug 복용 시간과 식사와의 관계는?',
+      '$drug 다른 약과 상호작용 있어?',
+    ];
   }
 
   @override
@@ -83,93 +102,145 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 채팅 메시지 리스트
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(AppSizes.md),
-              itemCount: chatState.messages.isEmpty
-                  ? 1
-                  : chatState.messages.length,
-              itemBuilder: (context, index) {
-                if (chatState.messages.isEmpty) {
-                  return _buildWelcomeMessage();
-                }
-                return _buildMessageBubble(chatState.messages[index]);
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 채팅 메시지 리스트
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.all(AppSizes.md),
+                itemCount: chatState.messages.isEmpty
+                    ? 1
+                    : chatState.messages.length,
+                itemBuilder: (context, index) {
+                  if (chatState.messages.isEmpty) {
+                    return _buildWelcomeMessage();
+                  }
+                  return _buildMessageBubble(chatState.messages[index]);
+                },
+              ),
             ),
-          ),
 
-          // 메시지 입력 영역
-          Container(
-            padding: const EdgeInsets.all(AppSizes.md),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: '메시지를 입력하세요...',
-                      hintStyle: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                        borderSide: BorderSide(color: AppColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                        borderSide: BorderSide(color: AppColors.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                        borderSide: BorderSide(color: AppColors.primary),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AppSizes.md,
-                        vertical: AppSizes.sm,
-                      ),
-                    ),
-                    maxLines: null,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
-                    enabled: !chatState.isLoading,
-                  ),
-                ),
-                const SizedBox(width: AppSizes.sm),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(AppSizes.radiusRound),
-                  ),
-                  child: IconButton(
-                    icon: chatState.isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+            // 추천 질문 칩 (입력창 위)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSizes.md,
+                vertical: AppSizes.sm,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: AppColors.border)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _buildSuggestedQuestions()
+                      .map(
+                        (q) => Padding(
+                          padding: const EdgeInsets.only(right: AppSizes.sm),
+                          child: ActionChip(
+                            label: Text(
+                              q,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                          )
-                        : const Icon(Icons.send, color: Colors.white),
-                    onPressed: chatState.isLoading ? null : _sendMessage,
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                  ),
+                            backgroundColor: AppColors.surface,
+                            side: BorderSide(color: AppColors.border),
+                            onPressed: () => _sendMessage(preset: q),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+
+            // 메시지 입력 영역 (하단 버튼 겹침 방지: SafeArea + padding)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSizes.md,
+                  AppSizes.sm,
+                  AppSizes.md,
+                  AppSizes.md,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: '메시지를 입력하세요...',
+                          hintStyle: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusLg,
+                            ),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusLg,
+                            ),
+                            borderSide: BorderSide(color: AppColors.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusLg,
+                            ),
+                            borderSide: BorderSide(color: AppColors.primary),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: AppSizes.md,
+                            vertical: AppSizes.sm,
+                          ),
+                        ),
+                        maxLines: null,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                        enabled: !chatState.isLoading,
+                      ),
+                    ),
+                    const SizedBox(width: AppSizes.sm),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(
+                          AppSizes.radiusRound,
+                        ),
+                      ),
+                      child: IconButton(
+                        icon: chatState.isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.send, color: Colors.white),
+                        onPressed: chatState.isLoading
+                            ? null
+                            : () => _sendMessage(),
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -257,7 +328,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    message.content,
+                    _sanitizeMarkdown(message.content),
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: message.isUser
                           ? Colors.white
@@ -301,7 +372,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   String _formatTime(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
-
     if (difference.inMinutes < 1) {
       return '방금 전';
     } else if (difference.inMinutes < 60) {
@@ -311,5 +381,16 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     } else {
       return '${timestamp.month}/${timestamp.day} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
     }
+  }
+
+  // 매우 간단한 마크다운 제거/치환: **bold** -> bold, * bullet -> •
+  String _sanitizeMarkdown(String text) {
+    String out = text.replaceAll('**', '');
+    out = out.replaceAll(RegExp(r'^\*\s', multiLine: true), '• ');
+    out = out.replaceAll(RegExp(r'^-\s', multiLine: true), '• ');
+    // strip code fences and language hint
+    out = out.replaceAll('```python', '');
+    out = out.replaceAll('```', '');
+    return out.trim();
   }
 }

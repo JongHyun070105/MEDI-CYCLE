@@ -6,7 +6,7 @@
     <!-- Kakao Maps SDK - appkey는 런타임에 치환될 예정 -->
     <script
       id="kakao-sdk"
-      src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=__KAKAO_APP_KEY__&libraries=services"
+      src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=__KAKAO_APP_KEY__&libraries=services,clusterer"
     ></script>
     <style>
       html,
@@ -33,6 +33,13 @@
             center: center,
             level: 4,
           });
+          var clusterer = new kakao.maps.MarkerClusterer({
+            map: map,
+            averageCenter: true,
+            minLevel: 6,
+          });
+          var meMarker = null;
+          var markers = [];
           // JS 브리지 메시지 수신: 위치 이동/마커 표시
           window.addEventListener("message", function (e) {
             try {
@@ -41,14 +48,32 @@
                 var latlng = new kakao.maps.LatLng(msg.lat, msg.lng);
                 map.setCenter(latlng);
               }
+              if (msg.type === "clearMarkers") {
+                markers.forEach(function (m) {
+                  m.setMap(null);
+                });
+                markers = [];
+                clusterer.clear();
+              }
               if (msg.type === "markers" && Array.isArray(msg.items)) {
-                msg.items.forEach(function (it) {
-                  var m = new kakao.maps.Marker({
-                    map: map,
+                var newMarkers = msg.items.map(function (it) {
+                  return new kakao.maps.Marker({
                     position: new kakao.maps.LatLng(it.lat, it.lng),
                     title: it.name || "",
                   });
                 });
+                markers = markers.concat(newMarkers);
+                clusterer.addMarkers(newMarkers);
+              }
+              if (msg.type === "setMe" && msg.lat && msg.lng) {
+                var here = new kakao.maps.LatLng(msg.lat, msg.lng);
+                if (meMarker) meMarker.setMap(null);
+                meMarker = new kakao.maps.Marker({
+                  map: map,
+                  position: here,
+                  title: "현재 위치",
+                });
+                map.setCenter(here);
               }
             } catch (err) {}
           });

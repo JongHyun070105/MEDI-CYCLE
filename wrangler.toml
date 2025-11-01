@@ -3,9 +3,9 @@ main = "src/cloudflare/index.ts"
 compatibility_date = "2024-10-27"
 
 [env.development]
-vars = { BACKEND_URL = "http://127.0.0.1:3000" }
-secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY"]
+vars = { BACKEND_URL = "https://municipal-getting-constitute-aberdeen.trycloudflare.com" }
+secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY", "KAKAO_REST_API_KEY", "KAKAO_JS_APP_KEY"]
 
 [env.production]
-vars = { BACKEND_URL = "https://zealand-semester-objectives-innocent.trycloudflare.com" }
-secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY"]
+vars = { BACKEND_URL = "https://municipal-getting-constitute-aberdeen.trycloudflare.com" }
+secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY", "KAKAO_REST_API_KEY", "KAKAO_JS_APP_KEY"]

@@ -3,6 +3,8 @@ export interface Env {
   ADDRESS_API_KEY: string;
   GEMINI_API_KEY: string;
   EAPIYAK_SERVICE_KEY: string;
+  KAKAO_REST_API_KEY?: string;
+  KAKAO_JS_APP_KEY?: string;
 }
 
 export default {
@@ -46,6 +48,25 @@ export default {
       // Drug detail (MFDS DrbEasyDrugInfoService - single item)
       if (pathname === "/drug-detail") {
         return handleDrugDetail(request, env);
+      }
+
+      // Kakao Local API proxy - keyword place search
+      if (pathname === "/kakao/places") {
+        return handleKakaoPlaces(request, env);
+      }
+
+      // Kakao Local API proxy - reverse geocode (coord2address)
+      if (pathname === "/kakao/reverse-geocode") {
+        return handleKakaoReverseGeocode(request, env);
+      }
+
+      if (pathname === "/kakao/static-map") {
+        return handleKakaoStaticMap(request, env);
+      }
+
+      // Kakao Map HTML with injected JS APP KEY (served via Worker)
+      if (pathname === "/kakao/map.html") {
+        return handleKakaoMapHtml(env);
       }
 
       // Backend proxy for all other routes
@@ -220,6 +241,70 @@ async function handleGeminiProxyV2(
   }
 }
 
+async function handleKakaoStaticMap(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const lat = url.searchParams.get("lat");
+  const lng = url.searchParams.get("lng");
+  const level = url.searchParams.get("level") || "4";
+  const width = url.searchParams.get("w") || "600";
+  const height = url.searchParams.get("h") || "400";
+  const markers = url.searchParams.getAll("markers");
+
+  if (!lat || !lng) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: "lat/lng 파라미터가 필요합니다.",
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  if (!env.KAKAO_REST_API_KEY) {
+    return new Response("KAKAO_REST_API_KEY is not configured", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+
+  let markerQuery = "";
+  for (const marker of markers) {
+    markerQuery += `&markers=${encodeURIComponent(marker)}`;
+  }
+
+  const kakaoUrl = `https://dapi.kakao.com/v2/maps/staticmap?map_type=TYPE_MAP&center=${encodeURIComponent(
+    `${lng},${lat}`
+  )}&level=${encodeURIComponent(level)}&w=${encodeURIComponent(
+    width
+  )}&h=${encodeURIComponent(height)}${markerQuery}`;
+
+  const response = await fetch(kakaoUrl, {
+    headers: {
+      Authorization: `KakaoAK ${env.KAKAO_REST_API_KEY}`,
+    },
+  });
+
+  const arrayBuffer = await response.arrayBuffer();
+
+  return new Response(arrayBuffer, {
+    status: response.status,
+    headers: {
+      "Content-Type": response.headers.get("Content-Type") || "image/png",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=300",
+    },
+  });
+}
+
 async function handleAddressSearch(
   request: Request,
   env: Env
@@ -264,6 +349,7 @@ async function handleAddressSearch(
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=60",
       },
     });
   } catch (jusoError) {
@@ -347,6 +433,7 @@ async function handleDrugSearch(request: Request, env: Env): Promise<Response> {
       headers: {
         "Content-Type": "application/xml; charset=utf-8",
         "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=120",
       },
     });
   } catch (error) {
@@ -400,6 +487,7 @@ async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
       headers: {
         "Content-Type": "application/xml; charset=utf-8",
         "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=120",
       },
     });
   } catch (error) {
@@ -414,4 +502,162 @@ async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
       }
     );
   }
+}
+
+// Kakao Local API: keyword search
+async function handleKakaoPlaces(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const query =
+    url.searchParams.get("query") || url.searchParams.get("keyword") || "";
+  if (!query) {
+    return new Response(
+      JSON.stringify({ success: false, message: "query is required" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+  const x = url.searchParams.get("x");
+  const y = url.searchParams.get("y");
+  const radius = url.searchParams.get("radius");
+  const page = url.searchParams.get("page");
+  const size = url.searchParams.get("size");
+  const category = url.searchParams.get("category_group_code");
+  const params = new URLSearchParams({ query });
+  if (x) params.set("x", x);
+  if (y) params.set("y", y);
+  if (radius) params.set("radius", radius);
+  if (page) params.set("page", page);
+  if (size) params.set("size", size);
+  if (category) params.set("category_group_code", category);
+  try {
+    const upstream = await fetch(
+      `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`,
+      {
+        headers: { Authorization: `KakaoAK ${env.KAKAO_REST_API_KEY || ""}` },
+      }
+    );
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=120",
+      },
+    });
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ success: false, message: "Kakao places error" }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+}
+
+// Kakao Local API: coord2address (reverse geocoding)
+async function handleKakaoReverseGeocode(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const x = url.searchParams.get("x");
+  const y = url.searchParams.get("y");
+  if (!x || !y) {
+    return new Response(
+      JSON.stringify({ success: false, message: "x and y are required" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+  const params = new URLSearchParams({ x, y });
+  try {
+    const upstream = await fetch(
+      `https://dapi.kakao.com/v2/local/geo/coord2address.json?${params.toString()}`,
+      {
+        headers: { Authorization: `KakaoAK ${env.KAKAO_REST_API_KEY || ""}` },
+      }
+    );
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=120",
+      },
+    });
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: "Kakao reverse geocode error",
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+}
+
+function handleKakaoMapHtml(env: Env): Response {
+  const appKey = env.KAKAO_JS_APP_KEY || "";
+  const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script id="kakao-sdk" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&libraries=services,clusterer"></script>
+    <style>html,body,#map{width:100%;height:100%;margin:0;padding:0}</style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      (function(){
+        var map, clusterer, meMarker; var markers=[];
+        function init(){
+          if(!window.kakao||!window.kakao.maps){setTimeout(init,100);return}
+          var center=new kakao.maps.LatLng(37.4979,127.0276);
+          map=new kakao.maps.Map(document.getElementById('map'),{center:center,level:4});
+          clusterer=new kakao.maps.MarkerClusterer({map:map,averageCenter:true,minLevel:6});
+          window.addEventListener('message',function(e){try{var msg=JSON.parse(e.data);
+            if(msg.type==='moveTo'&&msg.lat&&msg.lng){map.setCenter(new kakao.maps.LatLng(msg.lat,msg.lng));}
+            if(msg.type==='clearMarkers'){markers.forEach(function(m){m.setMap(null)});markers=[];clusterer.clear();}
+            if(msg.type==='markers'&&Array.isArray(msg.items)){var newMarkers=msg.items.map(function(it){return new kakao.maps.Marker({position:new kakao.maps.LatLng(it.lat,it.lng),title:it.name||''});});markers=markers.concat(newMarkers);clusterer.addMarkers(newMarkers);} 
+            if(msg.type==='setMe'&&msg.lat&&msg.lng){var here=new kakao.maps.LatLng(msg.lat,msg.lng); if(meMarker) meMarker.setMap(null); meMarker=new kakao.maps.Marker({map:map,position:here,title:'현재 위치'}); map.setCenter(here);} 
+          }catch(err){}});
+        } init();
+      })();
+    </script>
+  </body>
+  </html>`;
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }

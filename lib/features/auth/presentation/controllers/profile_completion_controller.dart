@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
-import '../../../../shared/services/auth_service.dart';
 
 part 'profile_completion_controller.freezed.dart';
 
@@ -20,8 +19,6 @@ class ProfileCompletionState with _$ProfileCompletionState {
 
 class ProfileCompletionController
     extends StateNotifier<ProfileCompletionState> {
-  final AuthService _authService = authService;
-
   ProfileCompletionController() : super(const ProfileCompletionState());
 
   Future<void> completeProfile({

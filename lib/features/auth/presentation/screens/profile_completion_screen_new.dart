@@ -72,8 +72,6 @@ class _ProfileCompletionScreenState
       final profileController = ref.read(
         profileCompletionControllerProvider.notifier,
       );
-      final now = DateTime.now();
-      final age = now.year - _selectedBirthDate!.year;
       await profileController.completeProfile(
         birthDate: _selectedBirthDate!,
         gender: _selectedGender!,

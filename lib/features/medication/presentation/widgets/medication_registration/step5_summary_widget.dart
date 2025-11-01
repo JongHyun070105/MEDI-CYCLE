@@ -58,7 +58,7 @@ class Step5SummaryWidget extends StatelessWidget {
         _buildSummaryCard(
           title: '복용 정보',
           items: [
-            '하루 복용 횟수: ${frequency}회',
+            '하루 복용 횟수: $frequency회',
             '복용 시간: ${dosageTimes.join(', ')}',
             '식전/식후: ${mealRelations.join(', ')} ${mealOffsets.join(', ')}분',
           ],
@@ -82,6 +82,7 @@ class Step5SummaryWidget extends StatelessWidget {
     required List<String> items,
   }) {
     return Container(
+      width: double.infinity,
       padding: EdgeInsets.all(AppSizes.lg),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -99,15 +100,17 @@ class Step5SummaryWidget extends StatelessWidget {
             ),
           ),
           SizedBox(height: AppSizes.sm),
-          ...items.map((item) => Padding(
-                padding: EdgeInsets.only(bottom: AppSizes.xs),
-                child: Text(
-                  item,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
-                  ),
+          ...items.map(
+            (item) => Padding(
+              padding: EdgeInsets.only(bottom: AppSizes.xs),
+              child: Text(
+                item,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textPrimary,
                 ),
-              )),
+              ),
+            ),
+          ),
         ],
       ),
     );

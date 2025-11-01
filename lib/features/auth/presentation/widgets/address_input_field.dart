@@ -81,7 +81,7 @@ class _AddressInputFieldState extends State<AddressInputField> {
   }
 
   void _openAddressSearch() async {
-    final result = await showDialog<AddressResult>(
+    await showDialog<AddressResult>(
       context: context,
       builder: (context) => AddressSearchDialog(
         onAddressSelected: (address) {

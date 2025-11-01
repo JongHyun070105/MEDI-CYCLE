@@ -32,6 +32,27 @@ const fetchDrugInfoFromEYakEunyo = async (
   }
 };
 
+// 공통 시스템 프롬프트 생성: 약학 컨시어지(쉬운 설명, 상호작용/주의 포함, 마크다운 금지)
+const buildSystemPrompt = (userInfo: any, drugInfo: string) => {
+  const serverTime = new Date().toISOString();
+  return `역할: 당신은 친절한 "AI 약학 컨시어지"입니다. 의학/약학 용어를 비전문가도 이해하기 쉽게 풀어서 설명합니다.
+
+답변 원칙:
+- 한국어로, 짧은 문장과 단락 사용. 과장/단정 금지.
+- 마크다운/코드블록/별표/백틱/번호 라벨 없이 순수 텍스트만 사용. (굵게, 리스트 마커(**, *, -, ``` 등) 금지)
+- 요청이 약물과 무관하면 1줄로 정중히 안내하고, 약물명/증상/복용 중 약을 물어 유도.
+- 부작용을 설명할 때는 흔한 증상 → 주의해야 할 심각 증상 순서로 간단히.
+- 상호작용은 대표적인 상충 약물/음식/알코올이 있으면 짧게 언급.
+- 응급상황 징후가 의심되면 즉시 119/응급실 안내.
+- 개인 맞춤: 사용자의 나이/성별/기저질환/복용약 정보가 부족하면 추가 질문을 제안.
+- 날짜/시간은 추정하지 말고, 필요한 경우 다음 값을 사용: 서버시각 ${serverTime}
+
+컨텍스트(참고용):
+- 사용자: ${JSON.stringify(userInfo)}
+- 약 정보(있으면 참고, 없으면 일반 가이드): ${drugInfo || "(없음)"}
+`;
+};
+
 // Gemini API 직접 호출
 const generateMedicalAdviceDirectly = async (
   userQuestion: string,
@@ -39,11 +60,7 @@ const generateMedicalAdviceDirectly = async (
   drugInfo: string
 ): Promise<string> => {
   try {
-    const systemPrompt = `당신은 약물 관련 질문에 도움을 주는 의료 정보 어시스턴트입니다.
-사용자 정보: ${JSON.stringify(userInfo)}
-약 정보: ${drugInfo}
-
-사용자의 질문에 친절하고 정확하게 답변하되, 의료 조언은 전문의와 상담할 것을 권장하세요.`;
+    const systemPrompt = buildSystemPrompt(userInfo, drugInfo);
 
     console.log("🤖 Calling Gemini API directly...");
 
@@ -62,9 +79,8 @@ const generateMedicalAdviceDirectly = async (
             {
               role: "user",
               parts: [
-                {
-                  text: `${systemPrompt}\n\n사용자 질문: ${userQuestion}`,
-                },
+                { text: systemPrompt },
+                { text: `사용자 질문: ${userQuestion}` },
               ],
             },
           ],
@@ -124,11 +140,7 @@ const generateMedicalAdvice = async (
   drugInfo: string
 ): Promise<string> => {
   try {
-    const systemPrompt = `당신은 약물 관련 질문에 도움을 주는 의료 정보 어시스턴트입니다.
-사용자 정보: ${JSON.stringify(userInfo)}
-약 정보: ${drugInfo}
-
-사용자의 질문에 친절하고 정확하게 답변하되, 의료 조언은 전문의와 상담할 것을 권장하세요.`;
+    const systemPrompt = buildSystemPrompt(userInfo, drugInfo);
 
     console.log("🤖 Calling Gemini API via Cloudflare Workers...");
     console.log("📍 Cloudflare Worker URL:", CLOUDFLARE_WORKER_URL);

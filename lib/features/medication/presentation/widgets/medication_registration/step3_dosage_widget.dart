@@ -39,10 +39,10 @@ class Step3DosageWidget extends StatelessWidget {
           ),
         ),
         SizedBox(height: AppSizes.lg),
-        
+
         _buildFrequencySelector(),
         SizedBox(height: AppSizes.lg),
-        
+
         _buildDosageTimesList(),
       ],
     );
@@ -54,23 +54,19 @@ class Step3DosageWidget extends StatelessWidget {
       children: [
         Text(
           '하루 복용 횟수',
-          style: AppTextStyles.bodyLarge.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
         ),
         SizedBox(height: AppSizes.sm),
         Row(
           children: List.generate(4, (index) {
             final frequency = index + 1;
             final isSelected = selectedFrequency == frequency;
-            
+
             return Expanded(
               child: GestureDetector(
                 onTap: () => onFrequencyChanged(frequency),
                 child: Container(
-                  margin: EdgeInsets.only(
-                    right: index < 3 ? AppSizes.sm : 0,
-                  ),
+                  margin: EdgeInsets.only(right: index < 3 ? AppSizes.sm : 0),
                   padding: EdgeInsets.symmetric(vertical: AppSizes.md),
                   decoration: BoxDecoration(
                     color: isSelected ? AppColors.primary : AppColors.surface,
@@ -80,7 +76,7 @@ class Step3DosageWidget extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    '${frequency}회',
+                    '$frequency회',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: isSelected ? Colors.white : AppColors.textPrimary,
@@ -102,31 +98,20 @@ class Step3DosageWidget extends StatelessWidget {
       children: [
         Text(
           '복용 시간',
-          style: AppTextStyles.bodyLarge.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
         ),
         SizedBox(height: AppSizes.sm),
-        
+
         ...List.generate(selectedFrequency, (index) {
           return Padding(
             padding: EdgeInsets.only(bottom: AppSizes.md),
             child: Row(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildTimePickerButton(index),
-                ),
+                Expanded(flex: 2, child: _buildTimePickerButton(index)),
                 SizedBox(width: AppSizes.sm),
-                Expanded(
-                  flex: 2,
-                  child: _buildMealRelationDropdown(index),
-                ),
+                Expanded(flex: 2, child: _buildMealRelationDropdown(index)),
                 SizedBox(width: AppSizes.sm),
-                Expanded(
-                  flex: 1,
-                  child: _buildMealOffsetDropdown(index),
-                ),
+                Expanded(flex: 1, child: _buildMealOffsetDropdown(index)),
               ],
             ),
           );
@@ -146,13 +131,17 @@ class Step3DosageWidget extends StatelessWidget {
             ),
             builder: (BuildContext context, Widget? child) {
               return MediaQuery(
-                data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(alwaysUse24HourFormat: true),
                 child: child!,
               );
             },
           );
           if (picked != null) {
-            onTimeChanged(index, picked.format(context));
+            final formattedTime =
+                '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+            onTimeChanged(index, formattedTime);
           }
         },
         child: Container(
@@ -188,13 +177,11 @@ class Step3DosageWidget extends StatelessWidget {
             onMealRelationChanged(index, newValue);
           }
         },
-        items: <String>['식전', '식후', '식중', '상관없음']
-            .map<DropdownMenuItem<String>>((String value) {
-          return DropdownMenuItem<String>(
-            value: value,
-            child: Text(value),
-          );
-        }).toList(),
+        items: <String>['식전', '식후', '식중', '상관없음'].map<DropdownMenuItem<String>>(
+          (String value) {
+            return DropdownMenuItem<String>(value: value, child: Text(value));
+          },
+        ).toList(),
       ),
     );
   }
@@ -210,12 +197,10 @@ class Step3DosageWidget extends StatelessWidget {
             onMealOffsetChanged(index, newValue);
           }
         },
-        items: <int>[0, 10, 20, 30, 40, 50, 60]
-            .map<DropdownMenuItem<int>>((int value) {
-          return DropdownMenuItem<int>(
-            value: value,
-            child: Text('$value분'),
-          );
+        items: <int>[0, 10, 20, 30, 40, 50, 60].map<DropdownMenuItem<int>>((
+          int value,
+        ) {
+          return DropdownMenuItem<int>(value: value, child: Text('$value분'));
         }).toList(),
       ),
     );

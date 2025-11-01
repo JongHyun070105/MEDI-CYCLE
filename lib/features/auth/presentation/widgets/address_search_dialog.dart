@@ -63,9 +63,9 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('주소 검색 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요.')),
+        );
       }
     }
   }

@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../shared/services/api_service.dart';
+import '../../../../shared/services/api_client.dart';
 import '../controllers/splash_controller.dart';
 import '../controllers/auth_controller.dart';
 import 'login_screen.dart';
@@ -68,12 +69,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await splashController.checkNetworkConnection();
 
     if (mounted) {
-      // 메모리 토큰 기준으로만 자동 로그인 시도 (없으면 로그인 화면)
+      // 저장된 토큰을 메모리로 동기화 후 자동 로그인 시도
+      await apiService.syncTokenFromStorage();
       final hasToken = apiService.isLoggedIn;
       if (hasToken) {
         try {
           final authController = ref.read(authControllerProvider.notifier);
-          await authController.loadUserProfile();
+          final expectedUserId = await ApiClient().getStoredUserId();
+          final expectedEmail = await ApiClient().getStoredUserEmail();
+          final success = await authController.loadUserProfile(
+            expectedUserId: expectedUserId,
+            expectedEmail: expectedEmail,
+          );
+          if (!success) {
+            if (!mounted) return;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+            return;
+          }
           if (!mounted) return;
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(

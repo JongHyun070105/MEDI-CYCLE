@@ -1,7 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'navigation_service.dart';
 
-const String baseUrl = 'http://localhost:3000';
+const String baseUrl = String.fromEnvironment(
+  'BACKEND_URL',
+  defaultValue: 'https://municipal-getting-constitute-aberdeen.trycloudflare.com',
+);
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -36,9 +40,54 @@ class ApiClient {
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          // 재시도용 메타 데이터 초기화
+          options.extra['retry_count'] =
+              (options.extra['retry_count'] ?? 0) as int;
           return handler.next(options);
         },
-        onError: (error, handler) {
+        onError: (error, handler) async {
+          final int status = error.response?.statusCode ?? 0;
+          // 401/403: 토큰 만료 처리
+          if (status == 401 || status == 403) {
+            try {
+              await clearToken();
+            } catch (_) {}
+            NavigationService.forceLogoutToSplash(
+              message: '인증이 만료되었습니다. 다시 로그인해주세요.',
+            );
+            return handler.reject(
+              DioException.badResponse(
+                statusCode: status,
+                requestOptions: error.requestOptions,
+                response:
+                    error.response ??
+                    Response(requestOptions: error.requestOptions, data: null),
+              ),
+            );
+          }
+
+          // 네트워크 오류 재시도(최대 2회, GET 요청 위주)
+          final req = error.requestOptions;
+          final bool isNetworkError =
+              error.type == DioExceptionType.connectionTimeout ||
+              error.type == DioExceptionType.receiveTimeout ||
+              error.type == DioExceptionType.badCertificate ||
+              error.type == DioExceptionType.connectionError ||
+              error.type == DioExceptionType.unknown;
+          if (isNetworkError && (req.method == 'GET' || req.method == 'get')) {
+            final int retried = (req.extra['retry_count'] ?? 0) as int;
+            if (retried < 2) {
+              await Future.delayed(Duration(milliseconds: 300 * (retried + 1)));
+              req.extra['retry_count'] = retried + 1;
+              try {
+                final cloned = await dio.fetch(req);
+                return handler.resolve(cloned);
+              } catch (e) {
+                // fallthrough
+              }
+            }
+          }
+
           return handler.next(error);
         },
       ),
@@ -53,17 +102,59 @@ class ApiClient {
 
   // 토큰 저장
   Future<void> saveToken(String token) async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
     await prefs.setString('auth_token', token);
   }
 
   // 토큰 가져오기
   Future<String?> getToken() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
     return prefs.getString('auth_token');
   }
 
   // 토큰 삭제
   Future<void> clearToken() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
     await prefs.remove('auth_token');
+  }
+
+  Future<void> saveUserIdentity({
+    required int userId,
+    required String email,
+  }) async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    await prefs.setInt('auth_user_id', userId);
+    await prefs.setString('auth_user_email', email);
+  }
+
+  Future<int?> getStoredUserId() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    return prefs.getInt('auth_user_id');
+  }
+
+  Future<String?> getStoredUserEmail() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    return prefs.getString('auth_user_email');
+  }
+
+  Future<void> clearUserIdentity() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    await prefs.remove('auth_user_id');
+    await prefs.remove('auth_user_email');
   }
 
   // 회원가입
@@ -95,7 +186,10 @@ class ApiClient {
       );
 
       if (response.statusCode != 200) {
-        throw Exception(response.data['error'] ?? '로그인 실패');
+        final errorMsg = response.data is Map<String, dynamic>
+            ? response.data['error'] ?? '로그인 실패'
+            : '로그인 실패';
+        throw Exception(errorMsg);
       }
 
       return response.data;

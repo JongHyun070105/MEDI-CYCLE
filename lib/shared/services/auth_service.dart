@@ -1,5 +1,6 @@
 import '../models/user_model.dart';
 import 'api_service.dart';
+import 'api_client.dart';
 
 class AuthService {
   final ApiService _apiService = apiService;
@@ -8,7 +9,7 @@ class AuthService {
   Future<AuthResponse> signup(UserSignupRequest request) async {
     try {
       // 1. 회원가입 요청
-      final signupResponse = await _apiService.post<Map<String, dynamic>>(
+      await _apiService.post<Map<String, dynamic>>(
         '/api/auth/register',
         data: request.toJson(),
       );
@@ -20,7 +21,11 @@ class AuthService {
 
       return loginResponse;
     } catch (e) {
-      throw Exception('회원가입 중 오류가 발생했습니다: $e');
+      // Pass through ApiException messages as-is for user-friendly toasts
+      if (e is ApiException) {
+        rethrow;
+      }
+      throw Exception('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -51,6 +56,12 @@ class AuthService {
 
       // 토큰 저장 및 AuthResponse 구성
       _apiService.setToken(token);
+      // ApiClient(dio) 경로에서도 동일 토큰 사용되도록 저장
+      try {
+        await ApiClient().saveToken(token);
+        await ApiClient()
+            .saveUserIdentity(userId: user.id, email: user.email);
+      } catch (_) {}
       final authResponse = AuthResponse(
         accessToken: token,
         tokenType: 'Bearer',
@@ -61,7 +72,10 @@ class AuthService {
     } catch (e) {
       print('❌ AuthService.login 오류: $e');
       print('❌ AuthService.login 오류 타입: ${e.runtimeType}');
-      throw Exception('로그인 중 오류가 발생했습니다: $e');
+      if (e is ApiException) {
+        rethrow; // controller/UI가 사용자 친화 메시지로 표시
+      }
+      throw Exception('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -73,7 +87,8 @@ class AuthService {
       );
       return User.fromJson(response.data!);
     } catch (e) {
-      throw Exception('사용자 정보 조회 중 오류가 발생했습니다: $e');
+      if (e is ApiException) rethrow;
+      throw Exception('사용자 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -81,12 +96,20 @@ class AuthService {
   Future<void> logout() async {
     try {
       _apiService.clearToken();
+      try {
+        await ApiClient().clearToken();
+        await ApiClient().clearUserIdentity();
+      } catch (_) {}
       // 서버에 로그아웃 요청 (필요시)
       // await _apiService.post('/auth/logout');
     } catch (e) {
       // 로그아웃은 실패해도 토큰은 제거
       _apiService.clearToken();
-      throw Exception('로그아웃 중 오류가 발생했습니다: $e');
+      try {
+        await ApiClient().clearToken();
+        await ApiClient().clearUserIdentity();
+      } catch (_) {}
+      throw Exception('로그아웃 처리 중 문제가 발생했습니다.');
     }
   }
 

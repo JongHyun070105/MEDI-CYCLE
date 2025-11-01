@@ -61,7 +61,7 @@ class ChatController extends StateNotifier<ChatState> {
     }
   }
 
-  Future<void> sendMessage(String content) async {
+  Future<void> sendMessage(String content, {int? medicationId}) async {
     final userMsg = ChatMessage(
       id: 'local-${DateTime.now().microsecondsSinceEpoch}',
       content: content,
@@ -74,7 +74,10 @@ class ChatController extends StateNotifier<ChatState> {
     );
 
     try {
-      final resp = await _api.sendChatMessage(content: content);
+      final resp = await _api.sendChatMessage(
+        content: content,
+        medicationId: medicationId,
+      );
       final ai = resp['aiMessage'] as Map<String, dynamic>?;
       final aiContent =
           (ai != null ? ai['content'] : resp['content'])?.toString() ??

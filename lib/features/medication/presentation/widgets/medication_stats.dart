@@ -8,10 +8,10 @@ class MedicationStats extends StatefulWidget {
   const MedicationStats({super.key});
 
   @override
-  State<MedicationStats> createState() => _MedicationStatsState();
+  State<MedicationStats> createState() => MedicationStatsState();
 }
 
-class _MedicationStatsState extends State<MedicationStats> {
+class MedicationStatsState extends State<MedicationStats> {
   int _uniqueMedications = 0; // unique count
   int _completedToday = 0;
   int _plannedToday = 0; // total planned intakes today (sum of times)
@@ -34,18 +34,46 @@ class _MedicationStatsState extends State<MedicationStats> {
         medsResponse['medications'] ?? [],
       );
 
-      // 유니크 약물 수
-      final Set<int> uniqueIds = medications.map((m) => m['id'] as int).toSet();
+      // 오늘 날짜 기준 활성 약만 집계: start_date <= today <= end_date(또는 무기한)
+      final DateTime today = DateTime.now();
+      bool isActive(Map<String, dynamic> m) {
+        final String? startStr = (m['start_date'] ?? m['startDate'])
+            ?.toString();
+        final String? endStr = (m['end_date'] ?? m['endDate'])?.toString();
+        final bool isIndefinite =
+            (m['is_indefinite'] ?? m['isIndefinite']) == true;
+        if (startStr == null || startStr.isEmpty) return false;
+        final DateTime? start = DateTime.tryParse(startStr);
+        final DateTime? end = endStr != null && endStr.isNotEmpty
+            ? DateTime.tryParse(endStr)
+            : null;
+        if (start == null) return false;
+        final bool afterStart = !today.isBefore(
+          DateTime(start.year, start.month, start.day),
+        );
+        final bool beforeEnd = isIndefinite || end == null
+            ? true
+            : !today.isAfter(
+                DateTime(end.year, end.month, end.day, 23, 59, 59),
+              );
+        return afterStart && beforeEnd;
+      }
+
+      final List<Map<String, dynamic>> activeMeds = medications
+          .where(isActive)
+          .toList();
+
+      // 유니크 약물 수(활성)
+      final Set<int> uniqueIds = activeMeds.map((m) => m['id'] as int).toSet();
       final int uniqueCount = uniqueIds.length;
 
-      // 오늘 계획된 복용 횟수 (빈 times 제외)
+      // 오늘 계획된 복용 횟수(활성 약의 times 합)
       int planned = 0;
-      for (final m in medications) {
+      for (final m in activeMeds) {
         planned += (m['dosage_times'] as List?)?.length ?? 0;
       }
 
       // 오늘의 복용 기록 조회
-      final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 

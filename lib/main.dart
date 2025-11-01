@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/screens/splash_screen.dart';
 import 'shared/services/api_client.dart';
+import 'shared/services/navigation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +27,7 @@ class MediCycleApp extends StatelessWidget {
       darkTheme: AppTheme.lightTheme,
       themeMode: ThemeMode.light,
       home: const SplashScreen(),
-      navigatorKey: GlobalKey<NavigatorState>(),
+      navigatorKey: NavigationService.navigatorKey,
     );
   }
 }

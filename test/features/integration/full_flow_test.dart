@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:medi_cycle_app/shared/services/api_client.dart' as app;
 
+const bool kUseLiveBackend = bool.fromEnvironment('USE_LIVE_BACKEND');
+
 void main() {
   group('Integration > Auth → Medication → Intake → Stats → Report', () {
     late app.ApiClient api;
@@ -18,154 +20,162 @@ void main() {
       await api.initializePrefs();
       raw = api.dio;
 
-      // Mock network via Dio interceptor
-      api.dio.interceptors.add(
-        InterceptorsWrapper(
-          onRequest: (options, handler) async {
-            final path = options.path;
-            final method = options.method.toUpperCase();
-            Map<String, dynamic> json({required Object? data}) =>
-                data as Map<String, dynamic>;
+      // Mock network via Dio interceptor (disabled when USE_LIVE_BACKEND=true)
+      if (!kUseLiveBackend) {
+        api.dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) async {
+              final path = options.path;
+              final method = options.method.toUpperCase();
+              Map<String, dynamic> json({required Object? data}) =>
+                  data as Map<String, dynamic>;
 
-            if (method == 'POST' && path.endsWith('/api/auth/register')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {"message": "ok"},
-                  statusCode: 200,
-                ),
-              );
-            }
-            if (method == 'POST' && path.endsWith('/api/auth/login')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {
-                    "token": "mock-token",
-                    "user": {"id": 1, "email": "test@ex.com", "name": "Tester"},
-                  },
-                  statusCode: 200,
-                ),
-              );
-            }
-            if (method == 'PUT' && path.endsWith('/api/auth/profile')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {"ok": true},
-                  statusCode: 200,
-                ),
-              );
-            }
-            if (method == 'POST' && path.endsWith('/api/medications')) {
-              final now = DateTime.now().toIso8601String();
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {
-                    "message": "약이 등록되었습니다",
-                    "medication": {
-                      "id": 1,
-                      "drug_name": json(data: options.data)["drug_name"],
-                      "frequency": json(data: options.data)["frequency"],
-                      "dosage_times": json(data: options.data)["dosage_times"],
-                      "start_date": json(data: options.data)["start_date"],
-                      "end_date": json(data: options.data)["end_date"],
-                      "created_at": now,
-                    },
-                  },
-                  statusCode: 201,
-                ),
-              );
-            }
-            if (method == 'POST' &&
-                path.endsWith('/api/medications/intake/record')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {
-                    "message": "복용 기록이 저장되었습니다",
-                    "intake": {"id": 1, "is_taken": true},
-                  },
-                  statusCode: 201,
-                ),
-              );
-            }
-            if (method == 'GET' &&
-                path.contains('/api/medications/intake/list')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {
-                    "intakes": [
-                      {
+              if (method == 'POST' && path.endsWith('/api/auth/register')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {"message": "ok"},
+                    statusCode: 200,
+                  ),
+                );
+              }
+              if (method == 'POST' && path.endsWith('/api/auth/login')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      "token": "mock-token",
+                      "user": {
                         "id": 1,
-                        "is_taken": true,
-                        "intake_time": DateTime.now().toIso8601String(),
+                        "email": "test@ex.com",
+                        "name": "Tester",
                       },
-                    ],
-                  },
-                  statusCode: 200,
-                ),
-              );
-            }
-            if (method == 'GET' &&
-                path.endsWith('/api/medications/stats/adherence/monthly')) {
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: {
-                    "months": [
-                      {
-                        "month": "2025-08",
-                        "planned": 10,
-                        "completed": 7,
-                        "adherence_pct": 70,
+                    },
+                    statusCode: 200,
+                  ),
+                );
+              }
+              if (method == 'PUT' && path.endsWith('/api/auth/profile')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {"ok": true},
+                    statusCode: 200,
+                  ),
+                );
+              }
+              if (method == 'POST' && path.endsWith('/api/medications')) {
+                final now = DateTime.now().toIso8601String();
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      "message": "약이 등록되었습니다",
+                      "medication": {
+                        "id": 1,
+                        "drug_name": json(data: options.data)["drug_name"],
+                        "frequency": json(data: options.data)["frequency"],
+                        "dosage_times": json(
+                          data: options.data,
+                        )["dosage_times"],
+                        "start_date": json(data: options.data)["start_date"],
+                        "end_date": json(data: options.data)["end_date"],
+                        "created_at": now,
                       },
-                      {
-                        "month": "2025-09",
-                        "planned": 12,
-                        "completed": 9,
-                        "adherence_pct": 75,
-                      },
-                      {
-                        "month": "2025-10",
-                        "planned": 15,
-                        "completed": 13,
-                        "adherence_pct": 87,
-                      },
-                    ],
-                  },
-                  statusCode: 200,
-                ),
-              );
-            }
-            if (method == 'GET' &&
-                path.endsWith('/api/medications/report/pdf')) {
-              // Return a minimal valid PDF header
-              final bytes = '%PDF-1.4\n%Mock'.codeUnits;
-              return handler.resolve(
-                Response(
-                  requestOptions: options,
-                  data: bytes,
-                  statusCode: 200,
-                  headers: Headers.fromMap({
-                    'content-type': ['application/pdf'],
-                  }),
-                ),
-              );
-            }
+                    },
+                    statusCode: 201,
+                  ),
+                );
+              }
+              if (method == 'POST' &&
+                  path.endsWith('/api/medications/intake/record')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      "message": "복용 기록이 저장되었습니다",
+                      "intake": {"id": 1, "is_taken": true},
+                    },
+                    statusCode: 201,
+                  ),
+                );
+              }
+              if (method == 'GET' &&
+                  path.contains('/api/medications/intake/list')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      "intakes": [
+                        {
+                          "id": 1,
+                          "is_taken": true,
+                          "intake_time": DateTime.now().toIso8601String(),
+                        },
+                      ],
+                    },
+                    statusCode: 200,
+                  ),
+                );
+              }
+              if (method == 'GET' &&
+                  path.endsWith('/api/medications/stats/adherence/monthly')) {
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      "months": [
+                        {
+                          "month": "2025-08",
+                          "planned": 10,
+                          "completed": 7,
+                          "adherence_pct": 70,
+                        },
+                        {
+                          "month": "2025-09",
+                          "planned": 12,
+                          "completed": 9,
+                          "adherence_pct": 75,
+                        },
+                        {
+                          "month": "2025-10",
+                          "planned": 15,
+                          "completed": 13,
+                          "adherence_pct": 87,
+                        },
+                      ],
+                    },
+                    statusCode: 200,
+                  ),
+                );
+              }
+              if (method == 'GET' &&
+                  path.endsWith('/api/medications/report/pdf')) {
+                // Return a minimal valid PDF header
+                final bytes = '%PDF-1.4\n%Mock'.codeUnits;
+                return handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: bytes,
+                    statusCode: 200,
+                    headers: Headers.fromMap({
+                      'content-type': ['application/pdf'],
+                    }),
+                  ),
+                );
+              }
 
-            // Fallback: prevent real network
-            return handler.reject(
-              DioException(
-                requestOptions: options,
-                error: 'No mock for $method $path',
-              ),
-            );
-          },
-        ),
-      );
+              // Fallback: prevent real network
+              return handler.reject(
+                DioException(
+                  requestOptions: options,
+                  error: 'No mock for $method $path',
+                ),
+              );
+            },
+          ),
+        );
+      }
     });
 
     test(

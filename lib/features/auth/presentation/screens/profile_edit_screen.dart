@@ -51,18 +51,23 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
           _selectedGender = user['gender'] ?? '남성';
 
           // 생년월일 파싱 (있는 경우)
-          if (user['age'] != null && user['age'] > 0) {
-            final currentYear = DateTime.now().year;
-            final age = (user['age'] as num).toInt();
-            _selectedBirthDate = DateTime(currentYear - age);
+          if (user['age'] != null) {
+            final ageValue = user['age'];
+            if (ageValue is num && ageValue > 0) {
+              final currentYear = DateTime.now().year;
+              final age = ageValue.toInt();
+              _selectedBirthDate = DateTime(currentYear - age);
+            }
           }
         });
       }
     } catch (e) {
-      // 기본값 유지
-      _nameController.text = '';
-      _emailController.text = '';
-      _selectedGender = '남성';
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = '';
+        _emailController.text = '';
+        _selectedGender = '남성';
+      });
     }
   }
 
@@ -110,8 +115,6 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       final profileController = ref.read(
         profileCompletionControllerProvider.notifier,
       );
-      final now = DateTime.now();
-      final age = now.year - _selectedBirthDate!.year;
 
       await profileController.completeProfile(
         birthDate: _selectedBirthDate!,

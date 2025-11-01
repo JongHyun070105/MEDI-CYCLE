@@ -5,6 +5,7 @@ import '../../../../../core/constants/app_text_styles.dart';
 import '../../../../../shared/services/drug_search_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import '../../../../../shared/services/ocr_service.dart';
 
 class Step2DrugNameWidget extends StatefulWidget {
@@ -188,15 +189,51 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
   }
 
   Future<void> _pickAndOcr() async {
+    final ImagePicker picker = ImagePicker();
+    XFile? picked;
     try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
+      picked = await picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 85,
       );
-      if (picked == null) return;
-      final text = await ocrService.extractText(File(picked.path));
-      final candidates = await ocrService.extractCandidateDrugNames(text);
+    } on PlatformException catch (_) {
+      // 시뮬레이터/권한 문제 등으로 카메라 사용 불가 → 갤러리 폴백
+    } catch (_) {
+      // 기타 예외는 폴백 시도
+    }
+
+    // 카메라 실패 또는 사용자가 취소한 경우 갤러리로 자동 전환
+    if (picked == null) {
+      try {
+        picked = await picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 85,
+        );
+        if (picked == null) {
+          // 사용자가 갤러리에서 취소한 경우: 아무 작업도 하지 않고 종료
+          return;
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('시뮬레이터/권한 문제로 갤러리에서 이미지를 선택합니다.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이미지를 불러오지 못했습니다. 다시 시도해주세요.')),
+          );
+        }
+        return;
+      }
+    }
+
+    // picked는 위 단계에서 보장됨
+
+    try {
+      final String text = await ocrService.extractText(File(picked.path));
+      final List<String> candidates = await ocrService
+          .extractCandidateDrugNames(text);
       if (candidates.isNotEmpty && mounted) {
         setState(() {
           widget.drugNameController.text = candidates.first;
@@ -209,9 +246,9 @@ class _Step2DrugNameWidgetState extends State<Step2DrugNameWidget> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('OCR 실패: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('텍스트 인식에 실패했습니다. 다른 이미지로 시도해주세요.')),
+        );
       }
     }
   }

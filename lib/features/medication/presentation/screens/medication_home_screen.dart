@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../widgets/medication_stats.dart';
+import '../widgets/pillbox_stats.dart';
 import 'medication_registration_screen.dart';
 import 'disposal_screen.dart';
 import 'medication_box_screen.dart';
@@ -22,6 +23,7 @@ class MedicationHomeScreen extends ConsumerStatefulWidget {
 
 class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
   int _currentIndex = 2;
+  final GlobalKey<_HomeTabState> _homeTabKey = GlobalKey<_HomeTabState>();
   final GlobalKey<_MedicationTabState> _medicationTabKey =
       GlobalKey<_MedicationTabState>();
 
@@ -59,7 +61,7 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         children: [
           const _DisposalTab(),
           _MedicationTab(key: _medicationTabKey),
-          const _HomeTab(),
+          _HomeTab(key: _homeTabKey),
           const _PharmacyTab(),
           const _ProfileTab(),
         ],
@@ -123,12 +125,14 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
                   onMedicationAdded: (medication) {
                     // 약이 추가될 때마다 리스트에 추가
                     _medicationTabKey.currentState?.addMedication(medication);
+                    _homeTabKey.currentState?.refreshAll();
                   },
                 ),
               ),
             );
             if (result != null && result is Map<String, dynamic>) {
               _medicationTabKey.currentState?.addMedication(result);
+              _homeTabKey.currentState?.refreshAll();
             }
           } else {
             // 다른 탭일 때는 챗봇으로 이동
@@ -149,8 +153,31 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
   }
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab();
+class _HomeTab extends StatefulWidget {
+  const _HomeTab({super.key});
+
+  @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  final GlobalKey<MedicationStatsState> _statsKey =
+      GlobalKey<MedicationStatsState>();
+  final GlobalKey<_TodayIntakeChecklistState> _checklistKey =
+      GlobalKey<_TodayIntakeChecklistState>();
+
+  void refreshAll() {
+    refreshStats();
+    refreshChecklist();
+  }
+
+  void refreshStats() {
+    _statsKey.currentState?.refreshStatistics();
+  }
+
+  void refreshChecklist() {
+    _checklistKey.currentState?.refreshChecklist();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +186,6 @@ class _HomeTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 오늘의 약물 통계
           Row(
             children: [
               Icon(Icons.bar_chart, color: AppColors.textPrimary, size: 20),
@@ -174,7 +200,7 @@ class _HomeTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSizes.md),
-          const MedicationStats(),
+          MedicationStats(key: _statsKey),
 
           const SizedBox(height: AppSizes.lg),
           Row(
@@ -198,8 +224,6 @@ class _HomeTab extends StatelessWidget {
           const _MonthlyAdherenceChart(),
 
           const SizedBox(height: AppSizes.lg),
-
-          // 오늘의 복약 현황
           Row(
             children: [
               Icon(
@@ -218,25 +242,32 @@ class _HomeTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSizes.md),
+          _TodayIntakeChecklist(
+            key: _checklistKey,
+            onChecklistChanged: refreshStats,
+          ),
 
-          // 투두리스트 스타일의 복약 현황
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              border: Border.all(color: AppColors.border, width: 1.5),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSizes.md),
-              child: Text(
-                '등록된 복약 체크 항목이 없습니다.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
+          const SizedBox(height: AppSizes.lg),
+          Row(
+            children: [
+              Icon(
+                Icons.inventory_2,
+                color: AppColors.textPrimary,
+                size: 20,
+              ),
+              const SizedBox(width: AppSizes.sm),
+              Text(
+                '약상자 상태',
+                style: AppTextStyles.h5.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
+            ],
           ),
-          // FAB 버튼이 가리는 것을 방지하기 위한 하단 패딩
+          const SizedBox(height: AppSizes.md),
+          const PillboxStats(),
+
           const SizedBox(height: 150),
         ],
       ),
@@ -254,6 +285,42 @@ class _MedicationTab extends StatefulWidget {
 class _MedicationTabState extends State<_MedicationTab> {
   // 실제 데이터는 등록 시(onMedicationAdded) 추가됨
   final List<Map<String, dynamic>> _registeredMedications = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMedications();
+  }
+
+  Future<void> _loadMedications() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final api = ApiClient();
+      final response = await api.getMedications();
+      final List<Map<String, dynamic>> meds = List<Map<String, dynamic>>.from(
+        response['medications'] ?? [],
+      );
+      final mapped = meds.map(_mapMedication).toList();
+      if (!mounted) return;
+      setState(() {
+        _registeredMedications
+          ..clear()
+          ..addAll(mapped);
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = '약 목록을 불러오지 못했습니다. 다시 시도해주세요.';
+      });
+    }
+  }
 
   void addMedication(Map<String, dynamic> medication) {
     setState(() {
@@ -265,6 +332,11 @@ class _MedicationTabState extends State<_MedicationTab> {
         backgroundColor: AppColors.primary,
       ),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadMedications();
+      }
+    });
   }
 
   @override
@@ -278,15 +350,24 @@ class _MedicationTabState extends State<_MedicationTab> {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
-      body: _registeredMedications.isEmpty
-          ? _buildEmptyState()
-          : _buildMedicationList(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _loadMedications,
+                  color: AppColors.primary,
+                  child: _registeredMedications.isEmpty
+                      ? _buildEmptyState()
+                      : _buildMedicationList(),
+                ),
     );
   }
 
   Widget _buildEmptyState() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSizes.md),
+      physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
           const SizedBox(height: AppSizes.md),
@@ -377,6 +458,35 @@ class _MedicationTabState extends State<_MedicationTab> {
     );
   }
 
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSizes.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _errorMessage ?? '약 목록을 불러오지 못했습니다.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSizes.md),
+            ElevatedButton(
+              onPressed: _loadMedications,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMedicationList() {
     return ListView.builder(
       padding: const EdgeInsets.all(AppSizes.md),
@@ -389,6 +499,8 @@ class _MedicationTabState extends State<_MedicationTab> {
   }
 
   Widget _buildMedicationCard(Map<String, dynamic> medication, int index) {
+    final List<String> times =
+        List<String>.from(medication['times'] ?? const <String>[]);
     return Card(
       margin: const EdgeInsets.only(bottom: AppSizes.md),
       elevation: 0,
@@ -472,7 +584,7 @@ class _MedicationTabState extends State<_MedicationTab> {
             const SizedBox(height: AppSizes.sm),
             _buildInfoItem(
               '복용 시간',
-              medication['times'].join(', '),
+              times.isEmpty ? '-' : times.join(', '),
               Icons.access_time,
             ),
             const SizedBox(height: AppSizes.sm),
@@ -610,6 +722,33 @@ class _MedicationTabState extends State<_MedicationTab> {
       ),
     );
   }
+
+  Map<String, dynamic> _mapMedication(Map<String, dynamic> medication) {
+    final List<dynamic> timesDynamic =
+        (medication['dosage_times'] ?? medication['dosageTimes'] ?? []) as List;
+    final List<String> times = timesDynamic.map((e) => e.toString()).toList();
+    final String startDate =
+        (medication['start_date'] ?? medication['startDate'] ?? '')
+            .toString();
+    final bool isIndefinite =
+        (medication['is_indefinite'] ?? medication['isIndefinite']) == true;
+    final String endDateRaw =
+        (medication['end_date'] ?? medication['endDate'] ?? '').toString();
+
+    return {
+      'id': medication['id'],
+      'name': medication['drug_name'] ?? medication['name'] ?? '이름 미상',
+      'manufacturer': medication['manufacturer'] ?? '-',
+      'times': times,
+      'frequency': medication['frequency'] is num
+          ? '하루 ${(medication['frequency'] as num).toInt()}회'
+          : (medication['frequency']?.toString() ?? '정보 없음'),
+      'startDate': startDate.isEmpty ? '-' : startDate,
+      'endDate': isIndefinite
+          ? '무기한'
+          : (endDateRaw.isEmpty ? '-' : endDateRaw),
+    };
+  }
 }
 
 class _DisposalTab extends StatelessWidget {
@@ -711,11 +850,15 @@ class _MedicationItem extends StatefulWidget {
   final String name;
   final String time;
   final bool isTaken;
+  final VoidCallback? onToggle;
+  final Widget? trailing;
 
   const _MedicationItem({
     required this.name,
     required this.time,
     required this.isTaken,
+    this.onToggle,
+    this.trailing,
   });
 
   @override
@@ -782,6 +925,9 @@ class _MedicationItemState extends State<_MedicationItem> {
                   duration: const Duration(seconds: 1),
                 ),
               );
+
+              // 부모 콜백 호출하여 서버 기록 반영
+              widget.onToggle?.call();
             },
             child: Container(
               width: 24,
@@ -796,6 +942,10 @@ class _MedicationItemState extends State<_MedicationItem> {
                   : null,
             ),
           ),
+          if (widget.trailing != null) ...[
+            const SizedBox(width: AppSizes.md),
+            widget.trailing!,
+          ],
         ],
       ),
     );
@@ -858,6 +1008,13 @@ class _MonthlyAdherenceChartState extends State<_MonthlyAdherenceChart> {
     return (parsed / 100.0).clamp(0.0, 1.0);
   }
 
+  String _formatMonth(String monthStr) {
+    if (monthStr.length > 5) {
+      return monthStr.substring(5);
+    }
+    return monthStr;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -902,7 +1059,7 @@ class _MonthlyAdherenceChartState extends State<_MonthlyAdherenceChart> {
                         _Bar(percent: _toPercent01(m['adherence_pct'])),
                         const SizedBox(height: AppSizes.sm),
                         Text(
-                          (m['month'] ?? '').toString().substring(5),
+                          _formatMonth((m['month'] ?? '').toString()),
                           style: AppTextStyles.caption.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -948,4 +1105,225 @@ class _Bar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TodayIntakeChecklist extends StatefulWidget {
+  final VoidCallback? onChecklistChanged;
+
+  const _TodayIntakeChecklist({super.key, this.onChecklistChanged});
+
+  @override
+  State<_TodayIntakeChecklist> createState() => _TodayIntakeChecklistState();
+}
+
+class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
+  bool _isLoading = true;
+  List<_PlannedIntake> _items = const [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> refreshChecklist() async {
+    setState(() {
+      _isLoading = true;
+    });
+    await _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final api = ApiClient();
+      final medsResp = await api.getMedications();
+      final List<Map<String, dynamic>> meds = List<Map<String, dynamic>>.from(
+        medsResp['medications'] ?? [],
+      );
+      final DateTime now = DateTime.now();
+      final DateTime start = DateTime(now.year, now.month, now.day);
+      final DateTime end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final intakesResp = await api.getMedicationIntakes(
+        startDate: start.toIso8601String(),
+        endDate: end.toIso8601String(),
+      );
+      final List<Map<String, dynamic>> intakes =
+          List<Map<String, dynamic>>.from(intakesResp['intakes'] ?? []);
+
+      List<_PlannedIntake> planned = [];
+      for (final m in meds) {
+        final int id = (m['id'] as int);
+        final String name = (m['drug_name'] ?? m['name'] ?? '').toString();
+        final List times = (m['dosage_times'] as List?) ?? const [];
+        for (final t in times) {
+          final String timeStr = t.toString();
+          final DateTime intakeDt = _composeToday(timeStr);
+          final bool taken = _matchTaken(intakes, id, intakeDt);
+          planned.add(
+            _PlannedIntake(
+              medicationId: id,
+              medicationName: name,
+              intakeTime: intakeDt,
+              timeLabel: timeStr,
+              isTaken: taken,
+            ),
+          );
+        }
+      }
+      setState(() {
+        _items = planned;
+        _isLoading = false;
+        _error = null;
+      });
+      widget.onChecklistChanged?.call();
+    } catch (e) {
+      setState(() {
+        _items = const [];
+        _isLoading = false;
+        _error = '네트워크 오류로 데이터를 불러오지 못했습니다.';
+      });
+    }
+  }
+
+  DateTime _composeToday(String hhmm) {
+    final DateTime n = DateTime.now();
+    final parts = hhmm.split(':');
+    final int h = int.tryParse(parts[0]) ?? 0;
+    final int m = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return DateTime(n.year, n.month, n.day, h, m);
+  }
+
+  bool _matchTaken(List<Map<String, dynamic>> intakes, int medId, DateTime dt) {
+    final String prefix = dt.toIso8601String().substring(
+      0,
+      16,
+    ); // yyyy-MM-ddTHH:mm
+    for (final it in intakes) {
+      final int mid = (it['medication_id'] ?? it['medicationId'] ?? 0) as int;
+      if (mid != medId) continue;
+      final String when = (it['intake_time'] ?? it['intakeTime'] ?? '')
+          .toString();
+      if (when.startsWith(prefix)) {
+        return (it['is_taken'] ?? it['isTaken'] ?? false) == true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _toggle(_PlannedIntake p) async {
+    try {
+      final api = ApiClient();
+      await api.recordMedicationIntake(
+        medicationId: p.medicationId,
+        intakeTime: p.intakeTime.toIso8601String(),
+        isTaken: !p.isTaken,
+      );
+      await _load();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      child: _isLoading
+          ? const Padding(
+              padding: EdgeInsets.all(AppSizes.md),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          : (_error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(AppSizes.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _error!,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: AppSizes.sm),
+                        ElevatedButton(
+                          onPressed: _load,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            splashFactory: NoSplash.splashFactory,
+                          ),
+                          child: const Text('다시 시도'),
+                        ),
+                      ],
+                    ),
+                  )
+                : (_items.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(AppSizes.md),
+                          child: Text(
+                            '등록된 복약 체크 항목이 없습니다.',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemBuilder: (ctx, i) {
+                            final p = _items[i];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSizes.md,
+                                vertical: AppSizes.sm,
+                              ),
+                              child: _MedicationItem(
+                                name: p.medicationName,
+                                time: p.timeLabel,
+                                isTaken: p.isTaken,
+                                onToggle: () => _toggle(p),
+                                trailing: IconButton(
+                                  icon: const Icon(
+                                    Icons.chat,
+                                    color: AppColors.primary,
+                                  ),
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => ChatbotScreen(
+                                          medicationId: p.medicationId,
+                                          medicationName: p.medicationName,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                          separatorBuilder: (_, __) => _buildDivider(),
+                          itemCount: _items.length,
+                        ))),
+    );
+  }
+}
+
+class _PlannedIntake {
+  final int medicationId;
+  final String medicationName;
+  final DateTime intakeTime;
+  final String timeLabel;
+  final bool isTaken;
+
+  const _PlannedIntake({
+    required this.medicationId,
+    required this.medicationName,
+    required this.intakeTime,
+    required this.timeLabel,
+    required this.isTaken,
+  });
 }

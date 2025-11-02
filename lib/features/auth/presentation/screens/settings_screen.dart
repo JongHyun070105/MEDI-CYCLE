@@ -357,7 +357,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSizes.sm),
             const Text('빌드: 1'),
             const SizedBox(height: AppSizes.sm),
-            const Text('개발자: MediCycle Team'),
+            const Text('개발자: 약드셔유 Team'),
             const SizedBox(height: AppSizes.sm),
             const Text(
               '안전한 의약품 순환 관리 서비스\n환경오염 방지를 위한 통합 플랫폼',

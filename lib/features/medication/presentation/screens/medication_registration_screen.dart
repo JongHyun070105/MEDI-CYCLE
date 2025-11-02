@@ -302,7 +302,7 @@ class _MedicationRegistrationScreenState
         drugName: _drugNameController.text.trim().isEmpty
             ? '사용자 입력 약'
             : _drugNameController.text.trim(),
-        frequency: '하루 $_selectedFrequency회',
+        frequency: '', // 빈 문자열로 전달 (내부에서 dailyCount 자동 계산됨)
         dosageTimes: _dosageTimes.map((timeStr) {
           final parts = timeStr.split(':');
           final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 12 : 12;

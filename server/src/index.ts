@@ -116,7 +116,7 @@ const startServer = async () => {
     app.listen(port, () => {
       console.log(`
 ╔════════════════════════════════════════╗
-║     MediCycle API Server Running       ║
+║     약드셔유 API Server Running        ║
 ║                                        ║
 ║  🌐 Server: http://localhost:${port}      ║
 ║  📦 Environment: ${process.env.NODE_ENV || "development"}        ║

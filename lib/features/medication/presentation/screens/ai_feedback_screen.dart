@@ -784,6 +784,8 @@ class _MonthlyTabState extends State<_MonthlyTab> {
   }
 
   Future<void> _downloadAndOpenReport(BuildContext context) async {
+    if (!context.mounted) return;
+    
     try {
       debugPrint('📄 PDF report generation started. 요청 준비');
       final api = ApiClient();
@@ -823,7 +825,7 @@ class _MonthlyTabState extends State<_MonthlyTab> {
       }
       dir ??= await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${dir.path}/medicycle_report_$timestamp.pdf');
+      final file = File('${dir.path}/yakdrugreport_$timestamp.pdf');
       await file.create(recursive: true);
       await file.writeAsBytes(bytes, flush: true);
       debugPrint('📄 PDF 파일 저장 완료: ${file.path}');
@@ -835,44 +837,44 @@ class _MonthlyTabState extends State<_MonthlyTab> {
       } catch (_) {
         opened = false;
       }
-      if (context.mounted) {
-        setState(() {
-          _isGeneratingReport = false;
-          _lastReportPath = file.path;
-        });
-        final messenger = ScaffoldMessenger.of(context);
-        if (opened) {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('리포트를 열었습니다.'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          debugPrint('📄 외부 앱에서 PDF를 열었습니다.');
-        } else {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('리포트가 $dirLabel에 저장되었습니다.\n${file.path}'),
-              backgroundColor: AppColors.primary,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-          debugPrint('📄 PDF 저장 후 수동 확인 필요.');
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        setState(() {
-          _isGeneratingReport = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('리포트를 열 수 없습니다: $e'),
-            backgroundColor: Colors.red,
+      
+      if (!context.mounted) return;
+      setState(() {
+        _isGeneratingReport = false;
+        _lastReportPath = file.path;
+      });
+      
+      final messenger = ScaffoldMessenger.of(context);
+      if (opened) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('리포트를 열었습니다.'),
+            backgroundColor: AppColors.primary,
           ),
         );
+        debugPrint('📄 외부 앱에서 PDF를 열었습니다.');
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('리포트가 $dirLabel에 저장되었습니다.'),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        debugPrint('📄 PDF 저장 후 수동 확인 필요.');
       }
+    } catch (e) {
       debugPrint('❌ PDF 생성 중 오류: $e');
+      if (!context.mounted) return;
+      setState(() {
+        _isGeneratingReport = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('리포트 생성 중 오류가 발생했습니다. 다시 시도해주세요.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 }

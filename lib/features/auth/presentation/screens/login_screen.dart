@@ -89,7 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       const SizedBox(height: AppSizes.md),
                       Text(
-                        'MediCycle',
+                        '약드셔유',
                         style: AppTextStyles.h3.copyWith(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,

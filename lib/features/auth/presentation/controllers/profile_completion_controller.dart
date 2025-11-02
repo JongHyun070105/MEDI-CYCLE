@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../../../shared/services/api_client.dart';
 
 part 'profile_completion_controller.freezed.dart';
 
@@ -34,12 +35,22 @@ class ProfileCompletionController
     );
 
     try {
-      // 생년월일로부터 나이 계산 (현재는 사용하지 않음)
-      // final now = DateTime.now();
-      // final age = now.year - birthDate.year;
+      // 생년월일로부터 나이 계산
+      final now = DateTime.now();
+      final age = now.year - birthDate.year;
 
-      // 프로필 정보 업데이트 (실제로는 서버 API 호출)
-      // 현재는 로컬 상태만 업데이트
+      // 프로필 정보 서버에 업데이트
+      final apiClient = ApiClient();
+      final fullAddress = detailAddress != null && detailAddress.isNotEmpty
+          ? '$address $detailAddress'
+          : address;
+      
+      await apiClient.updateProfile(
+        age: age,
+        gender: gender,
+        address: fullAddress,
+      );
+
       state = state.copyWith(
         isLoading: false,
         isCompleted: true,

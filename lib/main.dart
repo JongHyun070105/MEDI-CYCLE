@@ -12,11 +12,11 @@ void main() async {
   final apiClient = ApiClient();
   await apiClient.initializePrefs();
 
-  runApp(const ProviderScope(child: MediCycleApp()));
+  runApp(const ProviderScope(child: YakDrugYouApp()));
 }
 
-class MediCycleApp extends StatelessWidget {
-  const MediCycleApp({super.key});
+class YakDrugYouApp extends StatelessWidget {
+  const YakDrugYouApp({super.key});
 
   @override
   Widget build(BuildContext context) {

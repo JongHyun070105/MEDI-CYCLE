@@ -23,18 +23,20 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   void initState() {
     super.initState();
     // 채팅 이력 로드는 필요시 자동으로 로드됨
-    ref.listen(chatControllerProvider, (previous, next) {
-      if (previous?.messages.length != next.messages.length) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listen(chatControllerProvider, (previous, next) {
+        if (previous?.messages.length != next.messages.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_scrollController.hasClients) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+      });
     });
   }
 

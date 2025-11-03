@@ -6,7 +6,7 @@ import 'api_client.dart';
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'https://sign-structure-electronic-egg.trycloudflare.com',
+    defaultValue: 'https://guestbook-joyce-tutorials-accessory.trycloudflare.com',
   );
   late final Dio _dio;
   String? _token;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
@@ -614,6 +615,8 @@ class _KakaoMapViewState extends State<_KakaoMapView> {
                   setState(() => _category = 'all');
                   _loadPlaces();
                 },
+                selectedColor: AppColors.primary,
+                checkmarkColor: Colors.white,
               ),
               ChoiceChip(
                 label: const Text('약국'),
@@ -622,6 +625,8 @@ class _KakaoMapViewState extends State<_KakaoMapView> {
                   setState(() => _category = 'pharmacy');
                   _loadPlaces();
                 },
+                selectedColor: AppColors.primary,
+                checkmarkColor: Colors.white,
               ),
               ChoiceChip(
                 label: const Text('병원'),
@@ -630,6 +635,8 @@ class _KakaoMapViewState extends State<_KakaoMapView> {
                   setState(() => _category = 'hospital');
                   _loadPlaces();
                 },
+                selectedColor: AppColors.primary,
+                checkmarkColor: Colors.white,
               ),
               ChoiceChip(
                 label: const Text('보건소'),
@@ -638,6 +645,8 @@ class _KakaoMapViewState extends State<_KakaoMapView> {
                   setState(() => _category = 'health');
                   _loadPlaces();
                 },
+                selectedColor: AppColors.primary,
+                checkmarkColor: Colors.white,
               ),
             ],
           ),
@@ -940,7 +949,7 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
           const SizedBox(height: AppSizes.lg),
 
           // 신청자 정보
-          _buildEditableInputField('연락처', _phoneController, '연락처를 입력하세요'),
+          _buildEditableInputField('연락처', _phoneController, '010-1234-5678'),
           const SizedBox(height: AppSizes.lg),
 
           // 수거 희망일
@@ -1021,6 +1030,12 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
             ),
             contentPadding: const EdgeInsets.all(AppSizes.md),
           ),
+          keyboardType: label == '연락처' ? TextInputType.phone : TextInputType.text,
+          inputFormatters: label == '연락처' ? [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+            LengthLimitingTextInputFormatter(13),
+          ] : null,
+          maxLength: label == '연락처' ? 13 : null,
         ),
       ],
     );

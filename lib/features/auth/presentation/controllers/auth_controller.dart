@@ -23,7 +23,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   AuthController() : super(const AuthState());
 
-  Future<void> login({required String email, required String password}) async {
+  Future<void> login({required String email, required String password, bool? autoLogin}) async {
     state = state.copyWith(
       isLoading: true,
       hasError: false,
@@ -33,6 +33,7 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final response = await _authService.login(
         UserLoginRequest(email: email, password: password),
+        autoLogin: autoLogin,
       );
 
       state = state.copyWith(

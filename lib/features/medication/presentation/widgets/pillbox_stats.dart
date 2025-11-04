@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../shared/services/pillbox_service.dart';
-import '../../../../shared/models/pillbox_model.dart';
+import '../../../../shared/services/rpi_pillbox_service.dart';
 
 class PillboxStats extends StatefulWidget {
   const PillboxStats({super.key});
 
   @override
-  State<PillboxStats> createState() => _PillboxStatsState();
+  State<PillboxStats> createState() => PillboxStatsState();
 }
 
-class _PillboxStatsState extends State<PillboxStats> {
+class PillboxStatsState extends State<PillboxStats> {
+  final RpiPillboxService _rpiService = rpiPillboxService;
+  bool _isConnected = false;
+  bool _hasMedication = false;
   bool _isLoading = true;
-  PillboxStatus? _status;
+  bool _isLocked = true; // 더미데이터: 잠금 상태
 
   @override
   void initState() {
@@ -22,66 +25,96 @@ class _PillboxStatsState extends State<PillboxStats> {
     _loadStatus();
   }
 
+  /// 외부에서 새로고침 호출 가능
+  Future<void> refresh() async {
+    await _loadStatus();
+  }
+
   Future<void> _loadStatus() async {
     try {
-      final status = await pillboxService.getStatus();
+      final isConnected = await _rpiService.isConnected();
+      final status = await _rpiService.getStatus();
+
       if (!mounted) return;
       setState(() {
-        _status = status;
+        _isConnected = isConnected;
+        _hasMedication = status?.hasMedication ?? false;
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('약상자 상태 로드 실패: $e');
       if (!mounted) return;
       setState(() {
+        _isConnected = false;
         _isLoading = false;
-        _status = null;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Container(
-        padding: const EdgeInsets.all(AppSizes.lg),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          border: Border.all(color: AppColors.border),
+    return Row(
+      children: [
+        // 연결 상태 카드
+        Expanded(
+          child: _buildStatusCard(
+            icon: _isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+            iconColor: _isConnected ? AppColors.primary : AppColors.error,
+            backgroundColor: _isConnected
+                ? AppColors.primary.withOpacity(0.1)
+                : AppColors.error.withOpacity(0.1),
+            title: '연결 상태',
+            status: _isLoading
+                ? '확인 중...'
+                : (_isConnected ? '연결됨' : '연결 끊김'),
+            statusColor:
+                _isLoading ? AppColors.textSecondary : (_isConnected ? AppColors.primary : AppColors.error),
+          ),
         ),
-        child: const Center(
-          child: CircularProgressIndicator(strokeWidth: 2),
+        const SizedBox(width: AppSizes.sm),
+        // 약물 감지 카드
+        Expanded(
+          child: _buildStatusCard(
+            icon: _hasMedication ? Icons.check_circle : Icons.cancel,
+            iconColor: _hasMedication ? AppColors.success : AppColors.error,
+            backgroundColor: _hasMedication
+                ? AppColors.success.withOpacity(0.1)
+                : AppColors.error.withOpacity(0.1),
+            title: '약물 감지',
+            status: _isLoading
+                ? '확인 중...'
+                : (_hasMedication ? '감지됨' : '미감지'),
+            statusColor: _isLoading
+                ? AppColors.textSecondary
+                : (_hasMedication ? AppColors.success : AppColors.error),
+          ),
         ),
-      );
-    }
+        const SizedBox(width: AppSizes.sm),
+        // 잠금 상태 카드 (더미데이터)
+        Expanded(
+          child: _buildStatusCard(
+            icon: _isLocked ? Icons.lock : Icons.lock_open,
+            iconColor: _isLocked ? AppColors.error : AppColors.success,
+            backgroundColor: _isLocked
+                ? AppColors.error.withOpacity(0.1)
+                : AppColors.success.withOpacity(0.1),
+            title: '잠금 상태',
+            status: _isLocked ? '잠김' : '열림',
+            statusColor: _isLocked ? AppColors.error : AppColors.success,
+          ),
+        ),
+      ],
+    );
+  }
 
-    if (_status == null) {
-      return Container(
-        padding: const EdgeInsets.all(AppSizes.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.info_outline, color: AppColors.textSecondary, size: 20),
-            const SizedBox(width: AppSizes.sm),
-            Expanded(
-              child: Text(
-                '약상자가 등록되지 않았습니다.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final status = _status!;
-
+  Widget _buildStatusCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color backgroundColor,
+    required String title,
+    required String status,
+    required Color statusColor,
+  }) {
     return Container(
       padding: const EdgeInsets.all(AppSizes.md),
       decoration: BoxDecoration(
@@ -90,131 +123,42 @@ class _PillboxStatsState extends State<PillboxStats> {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: status.detected
-                          ? AppColors.success.withOpacity(0.1)
-                          : AppColors.error.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                    ),
-                    child: Icon(
-                      status.detected ? Icons.check_circle : Icons.cancel,
-                      color: status.detected ? AppColors.success : AppColors.error,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  Text(
-                    '약상자 상태',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                status.detected ? '감지됨' : '미감지',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: status.detected ? AppColors.success : AppColors.error,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          if (status.batteryPercent != null) ...[
-            const SizedBox(height: AppSizes.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _getBatteryIcon(status.batteryPercent!),
-                      color: _getBatteryColor(status.batteryPercent!),
-                      size: 20,
-                    ),
-                    const SizedBox(width: AppSizes.xs),
-                    Text(
-                      '배터리',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  '${status.batteryPercent}%',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: _getBatteryColor(status.batteryPercent!),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSizes.xs),
-            LinearProgressIndicator(
-              value: status.batteryPercent! / 100,
-              backgroundColor: AppColors.borderLight,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                _getBatteryColor(status.batteryPercent!),
-              ),
-              minHeight: 4,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: backgroundColor,
               borderRadius: BorderRadius.circular(AppSizes.radiusSm),
             ),
-          ],
+            child: Icon(
+              icon,
+              color: iconColor,
+              size: 24,
+            ),
+          ),
           const SizedBox(height: AppSizes.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    status.isLocked ? Icons.lock : Icons.lock_open,
-                    color: status.isLocked ? AppColors.error : AppColors.success,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppSizes.xs),
-                  Text(
-                    '잠금 상태',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                status.isLocked ? '잠김' : '열림',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: status.isLocked ? AppColors.error : AppColors.success,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSizes.xs),
+          Text(
+            status,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: statusColor,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
-  }
-
-  IconData _getBatteryIcon(int battery) {
-    if (battery > 50) return Icons.battery_full;
-    if (battery > 20) return Icons.battery_6_bar;
-    return Icons.battery_alert;
-  }
-
-  Color _getBatteryColor(int battery) {
-    if (battery > 50) return AppColors.success;
-    if (battery > 20) return AppColors.warning;
-    return AppColors.error;
   }
 }
 

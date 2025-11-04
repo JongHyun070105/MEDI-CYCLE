@@ -4,7 +4,7 @@ import 'navigation_service.dart';
 
 const String baseUrl = String.fromEnvironment(
   'BACKEND_URL',
-  defaultValue: 'https://guestbook-joyce-tutorials-accessory.trycloudflare.com',
+  defaultValue: 'https://redeem-agent-polymer-preliminary.trycloudflare.com',
 );
 
 class ApiClient {
@@ -122,6 +122,21 @@ class ApiClient {
       await initializePrefs();
     }
     await prefs.remove('auth_token');
+  }
+
+  // 자동로그인 플래그 저장/조회
+  Future<void> setAutoLoginEnabled(bool enabled) async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    await prefs.setBool('auto_login_enabled', enabled);
+  }
+
+  Future<bool> getAutoLoginEnabled() async {
+    if (!_initialized) {
+      await initializePrefs();
+    }
+    return prefs.getBool('auto_login_enabled') ?? true; // 기본값: 허용
   }
 
   Future<void> saveUserIdentity({

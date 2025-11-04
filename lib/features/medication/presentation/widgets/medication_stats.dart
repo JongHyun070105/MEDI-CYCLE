@@ -15,7 +15,6 @@ class MedicationStatsState extends State<MedicationStats> {
   int _uniqueMedications = 0; // unique count
   int _completedToday = 0;
   int _plannedToday = 0; // total planned intakes today (sum of times)
-  double _progressPercentage = 0.0;
   bool _isLoading = true;
 
   @override
@@ -91,15 +90,11 @@ class MedicationStatsState extends State<MedicationStats> {
           .where((it) => it['is_taken'] == true)
           .length;
 
-      // 진행률 계산: 완료/계획
-      final progress = planned > 0 ? completed / planned : 0.0;
-
       if (mounted) {
         setState(() {
           _uniqueMedications = uniqueCount;
           _plannedToday = planned;
           _completedToday = completed;
-          _progressPercentage = progress.clamp(0.0, 1.0);
           _isLoading = false;
         });
       }
@@ -114,18 +109,17 @@ class MedicationStatsState extends State<MedicationStats> {
 
   // 통계 새로고침 (외부에서 호출 가능)
   Future<void> refreshStatistics() async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
+    if (!mounted) return;
+    
+    // 로딩 상태를 설정하지 않고 바로 데이터 로드 (즉각 업데이트)
     await _loadStatistics();
   }
 
   @override
   Widget build(BuildContext context) {
+    // 개별 로딩 인디케이터 제거 - 페이지 전체 로딩으로 통합
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.shrink();
     }
 
     return Column(
@@ -153,50 +147,6 @@ class MedicationStatsState extends State<MedicationStats> {
               ),
             ),
           ],
-        ),
-
-        const SizedBox(height: AppSizes.md),
-
-        // 진행률 바
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSizes.md),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '오늘의 복용 진행률',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    '$_completedToday/$_plannedToday',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSizes.sm),
-              LinearProgressIndicator(
-                value: _progressPercentage,
-                backgroundColor: AppColors.borderLight,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-              ),
-            ],
-          ),
         ),
       ],
     );

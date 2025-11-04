@@ -1,24 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/services/rpi_pillbox_service.dart';
 
 class MedicationBoxScreen extends StatefulWidget {
   const MedicationBoxScreen({super.key});
 
   @override
-  State<MedicationBoxScreen> createState() => _MedicationBoxScreenState();
+  State<MedicationBoxScreen> createState() => MedicationBoxScreenState();
 }
 
-class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
-  final bool _isConnected = true;
-  bool _isLocked = true;
-  final bool _hasMedication = true;
-  int _batteryLevel = 42;
+class MedicationBoxScreenState extends State<MedicationBoxScreen> {
+  final RpiPillboxService _rpiService = rpiPillboxService;
+  bool _isConnected = false;
+  bool _isLoading = true;
+  bool _hasMedication = false;
+  bool _isLocked = true; // 더미데이터: 잠금 상태
+  DateTime? _lastSeenDateTime;
+  List<RpiPillboxLog> _recentLogs = [];
+
+  String _formatLastSeen(DateTime? dt) {
+    if (dt == null) return '알 수 없음';
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) {
+      return '${diff.inSeconds}초 전';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}분 전';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}시간 전';
+    } else {
+      return '${diff.inDays}일 전';
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatus();
+  }
+
+  /// 외부에서 새로고침 호출 가능
+  void refresh() {
+    _loadStatus();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Stack(
+      children: [
+        SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSizes.md,
         AppSizes.md,
@@ -44,6 +77,34 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
           _buildRecentActivity(),
         ],
       ),
+    ),
+        // 로딩 중 전체 화면 오버레이
+        if (_isLoading)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: AppSizes.md),
+                    Text(
+                      '약상자 상태를 불러오는 중입니다...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -82,11 +143,24 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
           ),
           const SizedBox(height: AppSizes.sm),
           Text(
-            _isConnected ? '마지막 연결: 방금 전' : '연결을 확인해주세요',
+            _isConnected
+                ? (_lastSeenDateTime != null
+                    ? '마지막 연결: ${_formatLastSeen(_lastSeenDateTime)}'
+                    : '마지막 연결: 확인 중...')
+                : '연결을 확인해주세요',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: AppSizes.sm),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
         ],
       ),
     );
@@ -109,15 +183,6 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
           value: _hasMedication ? '감지됨' : '감지 안됨',
           icon: _hasMedication ? Icons.check_circle : Icons.cancel,
           color: _hasMedication ? AppColors.success : AppColors.error,
-        ),
-        const SizedBox(height: AppSizes.md),
-        _buildStatusItem(
-          title: '배터리',
-          value: '$_batteryLevel%',
-          icon: _getBatteryIcon(),
-          color: _getBatteryColor(),
-          showProgress: true,
-          progress: _batteryLevel / 100,
         ),
         const SizedBox(height: AppSizes.md),
         _buildStatusItem(
@@ -213,38 +278,19 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
           ),
         ),
         const SizedBox(height: AppSizes.lg),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _isLocked ? _unlockBox : _lockBox,
-                icon: Icon(_isLocked ? Icons.lock_open : Icons.lock),
-                label: Text(_isLocked ? '상자 열기' : '상자 잠그기'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isLocked
-                      ? AppColors.primary
-                      : AppColors.error,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
-                  splashFactory: NoSplash.splashFactory,
-                ),
-              ),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isLoading ? null : _refreshStatus,
+            icon: const Icon(Icons.refresh),
+            label: const Text('상태 새로고침'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.primary),
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+              splashFactory: NoSplash.splashFactory,
             ),
-            const SizedBox(width: AppSizes.md),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _refreshStatus,
-                icon: const Icon(Icons.refresh),
-                label: const Text('상태 새로고침'),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primary),
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
-                  splashFactory: NoSplash.splashFactory,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
@@ -254,41 +300,51 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '최근 활동',
-          style: AppTextStyles.h5.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '최근 활동',
+              style: AppTextStyles.h5.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (_isLoading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
         ),
         const SizedBox(height: AppSizes.lg),
-        _buildActivityItem(
-          time: '2분 전',
-          action: '약물 감지됨',
-          icon: Icons.medication,
-          color: AppColors.success,
-        ),
-        const SizedBox(height: AppSizes.sm),
-        _buildActivityItem(
-          time: '1시간 전',
-          action: '상자가 잠김',
-          icon: Icons.lock,
-          color: AppColors.error,
-        ),
-        const SizedBox(height: AppSizes.sm),
-        _buildActivityItem(
-          time: '3시간 전',
-          action: '배터리 50% 이하',
-          icon: Icons.battery_alert,
-          color: AppColors.warning,
-        ),
-        const SizedBox(height: AppSizes.sm),
-        _buildActivityItem(
-          time: '1일 전',
-          action: '상자가 열림',
-          icon: Icons.lock_open,
-          color: AppColors.primary,
-        ),
+        if (_recentLogs.isEmpty && !_isLoading)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSizes.xl),
+              child: Text(
+                '활동 로그가 없습니다',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        else
+          ..._recentLogs.take(10).map((log) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSizes.sm),
+                child: _buildActivityItem(
+                  time: log.timeFormatted,
+                  action: log.hasMedication
+                      ? '약물 감지됨'
+                      : '약물 미감지',
+                  icon: log.hasMedication ? Icons.medication : Icons.cancel,
+                  color: log.hasMedication
+                      ? AppColors.success
+                      : AppColors.textSecondary,
+                ),
+              )),
       ],
     );
   }
@@ -343,55 +399,100 @@ class _MedicationBoxScreenState extends State<MedicationBoxScreen> {
     );
   }
 
-  IconData _getBatteryIcon() {
-    if (_batteryLevel > 50) return Icons.battery_full;
-    if (_batteryLevel > 20) return Icons.battery_6_bar;
-    return Icons.battery_alert;
-  }
-
-  Color _getBatteryColor() {
-    if (_batteryLevel > 50) return AppColors.success;
-    if (_batteryLevel > 20) return AppColors.warning;
-    return AppColors.error;
-  }
-
-  void _refreshStatus() {
+  Future<void> _loadStatus() async {
+    if (!mounted) return;
     setState(() {
-      // 실제로는 API 호출로 상태를 새로고침
-      _batteryLevel = 42 + (DateTime.now().millisecond % 20);
+      _isLoading = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('상태를 새로고침했습니다'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
+    try {
+      final isConnected = await _rpiService.isConnected();
+      final status = await _rpiService.getStatus();
+      final logs = await _rpiService.getLogs(limit: 20);
+
+      if (!mounted) return;
+      // 로그를 최신순으로 정렬 (시간 역순)
+      logs.sort((a, b) {
+        final aTime = a.timestamp;
+        final bTime = b.timestamp;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime); // 최신순 (내림차순)
+      });
+      
+      setState(() {
+        _isConnected = isConnected;
+        _hasMedication = status?.hasMedication ?? false;
+        _lastSeenDateTime = status?.lastSeenDateTime;
+        _recentLogs = logs;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('약상자 상태 로드 실패: $e');
+      if (!mounted) return;
+      setState(() {
+        _isConnected = false;
+        _isLoading = false;
+      });
+    }
   }
 
-  void _lockBox() {
+  Future<void> _refreshStatus() async {
+    if (!mounted) return;
     setState(() {
-      _isLocked = true;
+      _isLoading = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('약 상자가 잠겼습니다'),
-        backgroundColor: AppColors.error,
-      ),
-    );
-  }
+    try {
+      // 상태와 로그를 함께 새로고침
+      final isConnected = await _rpiService.isConnected();
+      final status = await _rpiService.getStatus();
+      final logs = await _rpiService.getLogs(limit: 20);
 
-  void _unlockBox() {
-    setState(() {
-      _isLocked = false;
-    });
+      if (!mounted) return;
+      // 로그를 최신순으로 정렬 (시간 역순)
+      logs.sort((a, b) {
+        final aTime = a.timestamp;
+        final bTime = b.timestamp;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime); // 최신순 (내림차순)
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('약 상자가 열렸습니다'),
-        backgroundColor: AppColors.success,
-      ),
-    );
+      setState(() {
+        _isConnected = isConnected;
+        _hasMedication = status?.hasMedication ?? false;
+        _lastSeenDateTime = status?.lastSeenDateTime;
+        _recentLogs = logs; // 로그 새로고침
+        _isLoading = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isConnected
+              ? '상태와 로그를 새로고침했습니다'
+              : '서버에 연결할 수 없습니다'),
+          backgroundColor:
+              _isConnected ? AppColors.primary : AppColors.error,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      debugPrint('약상자 상태 새로고침 실패: $e');
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('새로고침 중 오류가 발생했습니다'),
+          backgroundColor: AppColors.error,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }

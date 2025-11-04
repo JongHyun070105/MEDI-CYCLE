@@ -45,6 +45,7 @@ mixin _$Medication {
   DateTime get startDate => throw _privateConstructorUsedError;
   DateTime? get endDate => throw _privateConstructorUsedError;
   bool get isIndefinite => throw _privateConstructorUsedError;
+  DateTime? get expirationDate => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
   DateTime get updatedAt => throw _privateConstructorUsedError;
@@ -87,6 +88,7 @@ abstract class $MedicationCopyWith<$Res> {
       DateTime startDate,
       DateTime? endDate,
       bool isIndefinite,
+      DateTime? expirationDate,
       String? notes,
       DateTime createdAt,
       DateTime updatedAt});
@@ -137,6 +139,7 @@ class _$MedicationCopyWithImpl<$Res, $Val extends Medication>
     Object? startDate = null,
     Object? endDate = freezed,
     Object? isIndefinite = null,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
     Object? createdAt = null,
     Object? updatedAt = null,
@@ -242,6 +245,10 @@ class _$MedicationCopyWithImpl<$Res, $Val extends Medication>
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -364,6 +371,7 @@ abstract class _$$MedicationImplCopyWith<$Res>
       DateTime startDate,
       DateTime? endDate,
       bool isIndefinite,
+      DateTime? expirationDate,
       String? notes,
       DateTime createdAt,
       DateTime updatedAt});
@@ -418,6 +426,7 @@ class __$$MedicationImplCopyWithImpl<$Res>
     Object? startDate = null,
     Object? endDate = freezed,
     Object? isIndefinite = null,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
     Object? createdAt = null,
     Object? updatedAt = null,
@@ -523,6 +532,10 @@ class __$$MedicationImplCopyWithImpl<$Res>
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -568,6 +581,7 @@ class _$MedicationImpl implements _Medication {
       required this.startDate,
       this.endDate,
       required this.isIndefinite,
+      this.expirationDate,
       this.notes,
       required this.createdAt,
       required this.updatedAt});
@@ -627,6 +641,8 @@ class _$MedicationImpl implements _Medication {
   @override
   final bool isIndefinite;
   @override
+  final DateTime? expirationDate;
+  @override
   final String? notes;
   @override
   final DateTime createdAt;
@@ -635,7 +651,7 @@ class _$MedicationImpl implements _Medication {
 
   @override
   String toString() {
-    return 'Medication(id: $id, userId: $userId, name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'Medication(id: $id, userId: $userId, name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, expirationDate: $expirationDate, notes: $notes, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -683,6 +699,8 @@ class _$MedicationImpl implements _Medication {
             (identical(other.endDate, endDate) || other.endDate == endDate) &&
             (identical(other.isIndefinite, isIndefinite) ||
                 other.isIndefinite == isIndefinite) &&
+            (identical(other.expirationDate, expirationDate) ||
+                other.expirationDate == expirationDate) &&
             (identical(other.notes, notes) || other.notes == notes) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
@@ -719,6 +737,7 @@ class _$MedicationImpl implements _Medication {
         startDate,
         endDate,
         isIndefinite,
+        expirationDate,
         notes,
         createdAt,
         updatedAt
@@ -765,6 +784,7 @@ abstract class _Medication implements Medication {
       required final DateTime startDate,
       final DateTime? endDate,
       required final bool isIndefinite,
+      final DateTime? expirationDate,
       final String? notes,
       required final DateTime createdAt,
       required final DateTime updatedAt}) = _$MedicationImpl;
@@ -822,6 +842,8 @@ abstract class _Medication implements Medication {
   DateTime? get endDate;
   @override
   bool get isIndefinite;
+  @override
+  DateTime? get expirationDate;
   @override
   String? get notes;
   @override
@@ -1012,6 +1034,7 @@ mixin _$MedicationCreateRequest {
   DateTime get startDate => throw _privateConstructorUsedError;
   DateTime? get endDate => throw _privateConstructorUsedError;
   bool get isIndefinite => throw _privateConstructorUsedError;
+  DateTime? get expirationDate => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -1050,6 +1073,7 @@ abstract class $MedicationCreateRequestCopyWith<$Res> {
       DateTime startDate,
       DateTime? endDate,
       bool isIndefinite,
+      DateTime? expirationDate,
       String? notes});
 
   $TimeCopyWith<$Res>? get time1;
@@ -1097,6 +1121,7 @@ class _$MedicationCreateRequestCopyWithImpl<$Res,
     Object? startDate = null,
     Object? endDate = freezed,
     Object? isIndefinite = null,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
   }) {
     return _then(_value.copyWith(
@@ -1192,6 +1217,10 @@ class _$MedicationCreateRequestCopyWithImpl<$Res,
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -1305,6 +1334,7 @@ abstract class _$$MedicationCreateRequestImplCopyWith<$Res>
       DateTime startDate,
       DateTime? endDate,
       bool isIndefinite,
+      DateTime? expirationDate,
       String? notes});
 
   @override
@@ -1357,6 +1387,7 @@ class __$$MedicationCreateRequestImplCopyWithImpl<$Res>
     Object? startDate = null,
     Object? endDate = freezed,
     Object? isIndefinite = null,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
   }) {
     return _then(_$MedicationCreateRequestImpl(
@@ -1452,6 +1483,10 @@ class __$$MedicationCreateRequestImplCopyWithImpl<$Res>
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -1487,6 +1522,7 @@ class _$MedicationCreateRequestImpl implements _MedicationCreateRequest {
       required this.startDate,
       this.endDate,
       this.isIndefinite = false,
+      this.expirationDate,
       this.notes});
 
   factory _$MedicationCreateRequestImpl.fromJson(Map<String, dynamic> json) =>
@@ -1540,11 +1576,13 @@ class _$MedicationCreateRequestImpl implements _MedicationCreateRequest {
   @JsonKey()
   final bool isIndefinite;
   @override
+  final DateTime? expirationDate;
+  @override
   final String? notes;
 
   @override
   String toString() {
-    return 'MedicationCreateRequest(name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, notes: $notes)';
+    return 'MedicationCreateRequest(name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, expirationDate: $expirationDate, notes: $notes)';
   }
 
   @override
@@ -1590,6 +1628,8 @@ class _$MedicationCreateRequestImpl implements _MedicationCreateRequest {
             (identical(other.endDate, endDate) || other.endDate == endDate) &&
             (identical(other.isIndefinite, isIndefinite) ||
                 other.isIndefinite == isIndefinite) &&
+            (identical(other.expirationDate, expirationDate) ||
+                other.expirationDate == expirationDate) &&
             (identical(other.notes, notes) || other.notes == notes));
   }
 
@@ -1620,6 +1660,7 @@ class _$MedicationCreateRequestImpl implements _MedicationCreateRequest {
         startDate,
         endDate,
         isIndefinite,
+        expirationDate,
         notes
       ]);
 
@@ -1663,6 +1704,7 @@ abstract class _MedicationCreateRequest implements MedicationCreateRequest {
       required final DateTime startDate,
       final DateTime? endDate,
       final bool isIndefinite,
+      final DateTime? expirationDate,
       final String? notes}) = _$MedicationCreateRequestImpl;
 
   factory _MedicationCreateRequest.fromJson(Map<String, dynamic> json) =
@@ -1715,6 +1757,8 @@ abstract class _MedicationCreateRequest implements MedicationCreateRequest {
   @override
   bool get isIndefinite;
   @override
+  DateTime? get expirationDate;
+  @override
   String? get notes;
   @override
   @JsonKey(ignore: true)
@@ -1752,6 +1796,7 @@ mixin _$MedicationUpdateRequest {
   DateTime? get startDate => throw _privateConstructorUsedError;
   DateTime? get endDate => throw _privateConstructorUsedError;
   bool? get isIndefinite => throw _privateConstructorUsedError;
+  DateTime? get expirationDate => throw _privateConstructorUsedError;
   String? get notes => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -1790,6 +1835,7 @@ abstract class $MedicationUpdateRequestCopyWith<$Res> {
       DateTime? startDate,
       DateTime? endDate,
       bool? isIndefinite,
+      DateTime? expirationDate,
       String? notes});
 
   $TimeCopyWith<$Res>? get time1;
@@ -1837,6 +1883,7 @@ class _$MedicationUpdateRequestCopyWithImpl<$Res,
     Object? startDate = freezed,
     Object? endDate = freezed,
     Object? isIndefinite = freezed,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
   }) {
     return _then(_value.copyWith(
@@ -1932,6 +1979,10 @@ class _$MedicationUpdateRequestCopyWithImpl<$Res,
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool?,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -2045,6 +2096,7 @@ abstract class _$$MedicationUpdateRequestImplCopyWith<$Res>
       DateTime? startDate,
       DateTime? endDate,
       bool? isIndefinite,
+      DateTime? expirationDate,
       String? notes});
 
   @override
@@ -2097,6 +2149,7 @@ class __$$MedicationUpdateRequestImplCopyWithImpl<$Res>
     Object? startDate = freezed,
     Object? endDate = freezed,
     Object? isIndefinite = freezed,
+    Object? expirationDate = freezed,
     Object? notes = freezed,
   }) {
     return _then(_$MedicationUpdateRequestImpl(
@@ -2192,6 +2245,10 @@ class __$$MedicationUpdateRequestImplCopyWithImpl<$Res>
           ? _value.isIndefinite
           : isIndefinite // ignore: cast_nullable_to_non_nullable
               as bool?,
+      expirationDate: freezed == expirationDate
+          ? _value.expirationDate
+          : expirationDate // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       notes: freezed == notes
           ? _value.notes
           : notes // ignore: cast_nullable_to_non_nullable
@@ -2227,6 +2284,7 @@ class _$MedicationUpdateRequestImpl implements _MedicationUpdateRequest {
       this.startDate,
       this.endDate,
       this.isIndefinite,
+      this.expirationDate,
       this.notes});
 
   factory _$MedicationUpdateRequestImpl.fromJson(Map<String, dynamic> json) =>
@@ -2279,11 +2337,13 @@ class _$MedicationUpdateRequestImpl implements _MedicationUpdateRequest {
   @override
   final bool? isIndefinite;
   @override
+  final DateTime? expirationDate;
+  @override
   final String? notes;
 
   @override
   String toString() {
-    return 'MedicationUpdateRequest(name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, notes: $notes)';
+    return 'MedicationUpdateRequest(name: $name, dailyCount: $dailyCount, time1: $time1, time1Meal: $time1Meal, time1OffsetMin: $time1OffsetMin, time2: $time2, time2Meal: $time2Meal, time2OffsetMin: $time2OffsetMin, time3: $time3, time3Meal: $time3Meal, time3OffsetMin: $time3OffsetMin, time4: $time4, time4Meal: $time4Meal, time4OffsetMin: $time4OffsetMin, time5: $time5, time5Meal: $time5Meal, time5OffsetMin: $time5OffsetMin, time6: $time6, time6Meal: $time6Meal, time6OffsetMin: $time6OffsetMin, startDate: $startDate, endDate: $endDate, isIndefinite: $isIndefinite, expirationDate: $expirationDate, notes: $notes)';
   }
 
   @override
@@ -2329,6 +2389,8 @@ class _$MedicationUpdateRequestImpl implements _MedicationUpdateRequest {
             (identical(other.endDate, endDate) || other.endDate == endDate) &&
             (identical(other.isIndefinite, isIndefinite) ||
                 other.isIndefinite == isIndefinite) &&
+            (identical(other.expirationDate, expirationDate) ||
+                other.expirationDate == expirationDate) &&
             (identical(other.notes, notes) || other.notes == notes));
   }
 
@@ -2359,6 +2421,7 @@ class _$MedicationUpdateRequestImpl implements _MedicationUpdateRequest {
         startDate,
         endDate,
         isIndefinite,
+        expirationDate,
         notes
       ]);
 
@@ -2402,6 +2465,7 @@ abstract class _MedicationUpdateRequest implements MedicationUpdateRequest {
       final DateTime? startDate,
       final DateTime? endDate,
       final bool? isIndefinite,
+      final DateTime? expirationDate,
       final String? notes}) = _$MedicationUpdateRequestImpl;
 
   factory _MedicationUpdateRequest.fromJson(Map<String, dynamic> json) =
@@ -2453,6 +2517,8 @@ abstract class _MedicationUpdateRequest implements MedicationUpdateRequest {
   DateTime? get endDate;
   @override
   bool? get isIndefinite;
+  @override
+  DateTime? get expirationDate;
   @override
   String? get notes;
   @override

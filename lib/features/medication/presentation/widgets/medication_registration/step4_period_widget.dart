@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:flutter/cupertino.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_sizes.dart';
 import '../../../../../core/constants/app_text_styles.dart';
 
-class Step4PeriodWidget extends StatelessWidget {
+class Step4PeriodWidget extends StatefulWidget {
   final DateTime startDate;
   final DateTime endDate;
   final bool isIndefinite;
@@ -22,6 +24,11 @@ class Step4PeriodWidget extends StatelessWidget {
   });
 
   @override
+  State<Step4PeriodWidget> createState() => _Step4PeriodWidgetState();
+}
+
+class _Step4PeriodWidgetState extends State<Step4PeriodWidget> {
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,40 +41,83 @@ class Step4PeriodWidget extends StatelessWidget {
           ),
         ),
         SizedBox(height: AppSizes.lg),
-        
+
         _buildStartDateSelector(context),
         SizedBox(height: AppSizes.lg),
-        
+
         _buildIndefiniteToggle(),
         SizedBox(height: AppSizes.lg),
-        
-        if (!isIndefinite) _buildEndDateSelector(context),
+
+        if (!widget.isIndefinite) _buildEndDateSelector(context),
       ],
     );
   }
 
   Widget _buildStartDateSelector(BuildContext context) {
+    final DateTime minDate = DateTime(2025, 1, 1);
+    final DateTime maxDate = DateTime(2030, 12, 31);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           '복용 시작일',
-          style: AppTextStyles.bodyLarge.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
         ),
         SizedBox(height: AppSizes.sm),
         GestureDetector(
-          onTap: () async {
-            final DateTime? picked = await showDatePicker(
+          onTap: () {
+            DateTime selectedDate = widget.startDate;
+            showCupertinoModalPopup<void>(
               context: context,
-              initialDate: startDate,
-              firstDate: DateTime.now(),
-              lastDate: DateTime.now().add(const Duration(days: 365)),
+              builder: (BuildContext context) => Container(
+                height: 250,
+                padding: const EdgeInsets.only(top: 6.0),
+                margin: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                color: CupertinoColors.systemBackground.resolveFrom(context),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          CupertinoButton(
+                            child: const Text(
+                              '취소',
+                              style: TextStyle(
+                                color: CupertinoColors.systemRed,
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          CupertinoButton(
+                            child: const Text('확인'),
+                            onPressed: () {
+                              widget.onStartDateChanged(selectedDate);
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                      Expanded(
+                        child: CupertinoDatePicker(
+                          initialDateTime: widget.startDate,
+                          minimumDate: minDate,
+                          maximumDate: maxDate,
+                          mode: CupertinoDatePickerMode.date,
+                          onDateTimeChanged: (DateTime newDate) {
+                            selectedDate = newDate;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             );
-            if (picked != null && picked != startDate) {
-              onStartDateChanged(picked);
-            }
           },
           child: Container(
             padding: EdgeInsets.all(AppSizes.md),
@@ -85,7 +135,7 @@ class Step4PeriodWidget extends StatelessWidget {
                 ),
                 SizedBox(width: AppSizes.sm),
                 Text(
-                  '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}',
+                  '${widget.startDate.year}-${widget.startDate.month.toString().padLeft(2, '0')}-${widget.startDate.day.toString().padLeft(2, '0')}',
                   style: AppTextStyles.bodyMedium,
                 ),
               ],
@@ -100,8 +150,8 @@ class Step4PeriodWidget extends StatelessWidget {
     return Row(
       children: [
         Checkbox(
-          value: isIndefinite,
-          onChanged: (value) => onIndefiniteChanged(value ?? false),
+          value: widget.isIndefinite,
+          onChanged: (value) => widget.onIndefiniteChanged(value ?? false),
           activeColor: AppColors.primary,
         ),
         SizedBox(width: AppSizes.sm),
@@ -123,22 +173,62 @@ class Step4PeriodWidget extends StatelessWidget {
       children: [
         Text(
           '복용 종료일',
-          style: AppTextStyles.bodyLarge.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600),
         ),
         SizedBox(height: AppSizes.sm),
         GestureDetector(
-          onTap: () async {
-            final DateTime? picked = await showDatePicker(
+          onTap: () {
+            DateTime selectedDate = widget.endDate;
+            showCupertinoModalPopup<void>(
               context: context,
-              initialDate: endDate,
-              firstDate: startDate,
-              lastDate: DateTime.now().add(const Duration(days: 365)),
+              builder: (BuildContext context) => Container(
+                height: 250,
+                padding: const EdgeInsets.only(top: 6.0),
+                margin: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                color: CupertinoColors.systemBackground.resolveFrom(context),
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          CupertinoButton(
+                            child: const Text(
+                              '취소',
+                              style: TextStyle(
+                                color: CupertinoColors.systemRed,
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          CupertinoButton(
+                            child: const Text('확인'),
+                            onPressed: () {
+                              widget.onEndDateChanged(selectedDate);
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                      Expanded(
+                        child: CupertinoDatePicker(
+                          initialDateTime: widget.endDate,
+                          minimumDate: widget.startDate,
+                          maximumDate: DateTime(2030, 12, 31),
+                          mode: CupertinoDatePickerMode.date,
+                          onDateTimeChanged: (DateTime newDate) {
+                            selectedDate = newDate;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             );
-            if (picked != null && picked != endDate) {
-              onEndDateChanged(picked);
-            }
           },
           child: Container(
             padding: EdgeInsets.all(AppSizes.md),
@@ -156,7 +246,7 @@ class Step4PeriodWidget extends StatelessWidget {
                 ),
                 SizedBox(width: AppSizes.sm),
                 Text(
-                  '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}',
+                  '${widget.endDate.year}-${widget.endDate.month.toString().padLeft(2, '0')}-${widget.endDate.day.toString().padLeft(2, '0')}',
                   style: AppTextStyles.bodyMedium,
                 ),
               ],

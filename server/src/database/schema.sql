@@ -64,9 +64,30 @@ CREATE TABLE IF NOT EXISTS pillboxes (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 약상자 상태 테이블 (최신 상태만 유지)
+CREATE TABLE IF NOT EXISTS pillbox_status (
+    pillbox_id INT PRIMARY KEY REFERENCES pillboxes(id) ON DELETE CASCADE,
+    has_medication BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 약상자 로그 테이블 (활동 기록)
+CREATE TABLE IF NOT EXISTS pillbox_logs (
+    id SERIAL PRIMARY KEY,
+    pillbox_id INT NOT NULL REFERENCES pillboxes(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    log_message TEXT NOT NULL,
+    has_medication BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_medications_user_id ON medications(user_id);
 CREATE INDEX IF NOT EXISTS idx_medication_intakes_user_id ON medication_intakes(user_id);
 CREATE INDEX IF NOT EXISTS idx_medication_intakes_medication_id ON medication_intakes(medication_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id ON chat_messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_pillboxes_user_id ON pillboxes(user_id);
+CREATE INDEX IF NOT EXISTS idx_pillbox_logs_pillbox_id ON pillbox_logs(pillbox_id);
+CREATE INDEX IF NOT EXISTS idx_pillbox_logs_user_id ON pillbox_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_pillbox_logs_created_at ON pillbox_logs(created_at DESC);

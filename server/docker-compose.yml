@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -13,6 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./sql/add_feedback_table.sql:/docker-entrypoint-initdb.d/02-feedback-table.sql
     networks:
       - medicycle_network
     healthcheck:
@@ -38,11 +37,25 @@ services:
       GEMINI_API_KEY: AIzaSyAGjs6sVTbLiDWz0ELsUlyCK3BPIHaVSeg
       EAPIYAK_SERVICE_KEY: dJfT/j5TTe7mvR8DIXbP9SoyhvH+Fx7dS27bsViReXQiQtQPPp6ng7o1jHITVXdW3PRS/20m48MQgaBT9nFecw==
       CLOUDFLARE_WORKER_URL: https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev
+      ML_SERVER_URL: http://ml_server:8000
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+      ml_server:
+        condition: service_started
+    networks:
+      - medicycle_network
+    restart: unless-stopped
+
+  ml_server:
+    build: ./ml_server
+    container_name: medicycle_ml_server
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
     networks:
       - medicycle_network
     restart: unless-stopped

@@ -18,25 +18,13 @@ class ChatbotScreen extends ConsumerStatefulWidget {
 class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  bool _showSuggestedQuestions = true;
 
   @override
   void initState() {
     super.initState();
-    // 채팅 이력 로드는 필요시 자동으로 로드됨
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listen(chatControllerProvider, (previous, next) {
-        if (previous?.messages.length != next.messages.length) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_scrollController.hasClients) {
-              _scrollController.animateTo(
-                _scrollController.position.maxScrollExtent,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            }
-          });
-        }
-      });
+      ref.read(chatControllerProvider.notifier).loadHistory();
     });
   }
 
@@ -51,6 +39,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     final String message = (preset ?? _messageController.text).trim();
     if (message.isEmpty) return;
     _messageController.clear();
+    setState(() {
+      _showSuggestedQuestions = true;
+    });
     final chatController = ref.read(chatControllerProvider.notifier);
     await chatController.sendMessage(
       message,
@@ -79,7 +70,23 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatControllerProvider);
 
+    // 메시지 리스트 변화 감지하여 자동 스크롤
+    ref.listen(chatControllerProvider, (previous, next) {
+      if (previous?.messages.length != next.messages.length) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
+    });
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('AI 챗봇'),
@@ -104,7 +111,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           ),
         ],
       ),
-      body: SafeArea(
+      body: Stack(
+        children: [
+          SafeArea(
         child: Column(
           children: [
             // 채팅 메시지 리스트
@@ -124,7 +133,8 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               ),
             ),
 
-            // 추천 질문 칩 (입력창 위)
+            // 추천 질문 칩 (입력창 위) - 텍스트 입력 시 숨김
+            if (_showSuggestedQuestions && _messageController.text.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
@@ -151,7 +161,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                             ),
                             backgroundColor: AppColors.surface,
                             side: BorderSide(color: AppColors.border),
-                            onPressed: () => _sendMessage(preset: q),
+                            onPressed: chatState.isLoading ? null : () => _sendMessage(preset: q),
                           ),
                         ),
                       )
@@ -206,6 +216,11 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         maxLines: null,
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _sendMessage(),
+                        onChanged: (value) {
+                          setState(() {
+                            _showSuggestedQuestions = value.isEmpty;
+                          });
+                        },
                         enabled: !chatState.isLoading,
                       ),
                     ),
@@ -218,18 +233,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                         ),
                       ),
                       child: IconButton(
-                        icon: chatState.isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : const Icon(Icons.send, color: Colors.white),
+                        icon: const Icon(Icons.send, color: Colors.white),
                         onPressed: chatState.isLoading
                             ? null
                             : () => _sendMessage(),
@@ -243,6 +247,35 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
             ),
           ],
         ),
+          ),
+
+          // 메시지 전송 중 전체 화면 오버레이
+          if (chatState.isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                      SizedBox(height: AppSizes.md),
+                      Text(
+                        '메시지를 전송하는 중입니다...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

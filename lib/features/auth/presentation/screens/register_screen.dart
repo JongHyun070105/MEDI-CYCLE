@@ -100,7 +100,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: SafeArea(
+      body: Stack(
+        children: [
+          SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSizes.lg),
           child: Form(
@@ -324,12 +326,41 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 CustomButton(
                   text: '회원가입',
                   onPressed: authState.isLoading ? null : _handleRegister,
-                  isLoading: authState.isLoading,
+                  isLoading: false, // 버튼 내 인디케이터 제거
                 ),
               ],
             ),
           ),
         ),
+          ),
+
+          // 회원가입 중 전체 화면 오버레이
+          if (authState.isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                      SizedBox(height: AppSizes.md),
+                      Text(
+                        '회원가입하는 중입니다...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

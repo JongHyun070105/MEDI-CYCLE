@@ -40,29 +40,35 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
 
   Future<void> _searchAddress() async {
     if (_searchController.text.trim().isEmpty) {
+      if (mounted) {
       setState(() {
         _searchResults = [];
       });
+      }
       return;
     }
 
+    if (mounted) {
     setState(() {
       _isLoading = true;
     });
+    }
 
     try {
       final results = await AddressSearchService.searchAddress(
         _searchController.text.trim(),
       );
+      if (mounted) {
       setState(() {
         _searchResults = results;
         _isLoading = false;
       });
+      }
     } catch (e) {
+      if (mounted) {
       setState(() {
         _isLoading = false;
       });
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('주소 검색에 실패했습니다. 잠시 후 다시 시도해주세요.')),
         );
@@ -77,10 +83,18 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
         borderRadius: BorderRadius.circular(AppSizes.cardRadius),
       ),
       child: Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(AppSizes.lg),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        padding: EdgeInsets.only(
+          left: AppSizes.lg,
+          right: AppSizes.lg,
+          top: AppSizes.lg,
+          bottom: MediaQuery.of(context).viewInsets.bottom + AppSizes.lg,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // 헤더
             Row(
@@ -113,9 +127,11 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
                     ? IconButton(
                         onPressed: () {
                           _searchController.clear();
+                          if (mounted) {
                           setState(() {
                             _searchResults = [];
                           });
+                          }
                         },
                         icon: const Icon(Icons.clear),
                       )
@@ -129,13 +145,17 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
                 ),
               ),
               onChanged: (value) {
+                if (mounted) {
                 setState(() {});
+                }
                 if (value.length >= 2) {
                   _searchAddress();
                 } else {
+                  if (mounted) {
                   setState(() {
                     _searchResults = [];
                   });
+                  }
                 }
               },
               onSubmitted: (value) => _searchAddress(),
@@ -177,12 +197,15 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
             const SizedBox(height: AppSizes.lg),
 
             // 검색 결과
-            Expanded(
+            Flexible(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _searchResults.isEmpty
-                  ? Center(
+                  ? SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSizes.lg),
                       child: Column(
+                          mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
@@ -200,9 +223,11 @@ class _AddressSearchDialogState extends State<AddressSearchDialog> {
                             ),
                           ),
                         ],
+                        ),
                       ),
                     )
                   : ListView.builder(
+                      shrinkWrap: true,
                       itemCount: _searchResults.length,
                       itemBuilder: (context, index) {
                         final result = _searchResults[index];

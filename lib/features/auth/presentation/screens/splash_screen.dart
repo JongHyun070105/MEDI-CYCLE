@@ -70,8 +70,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     if (mounted) {
       // 저장된 토큰을 메모리로 동기화 후 자동 로그인 시도
+      final autoLoginEnabled = await ApiClient().getAutoLoginEnabled();
       await apiService.syncTokenFromStorage();
-      final hasToken = apiService.isLoggedIn;
+      final hasToken = apiService.isLoggedIn && autoLoginEnabled;
       if (hasToken) {
         try {
           final authController = ref.read(authControllerProvider.notifier);
@@ -157,10 +158,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.medication,
-                          size: 60,
-                          color: AppColors.primary,
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     );
@@ -202,29 +205,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   },
                 ),
 
-                const SizedBox(height: AppSizes.xxl),
-
-                // 로딩 상태 표시
-                Column(
-                  children: [
-                    if (splashState.isLoading)
-                      const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    const SizedBox(height: AppSizes.md),
-                    Text(
-                      splashState.isLoading
-                          ? '네트워크 연결 확인 중...'
-                          : splashState.hasNetworkError
-                          ? '네트워크 연결을 확인해주세요'
-                          : '환경을 위한 의약품 순환 관리',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: Colors.white.withOpacity(0.8),
-                      ),
-                      textAlign: TextAlign.center,
+                if (splashState.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: AppSizes.xxl),
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),

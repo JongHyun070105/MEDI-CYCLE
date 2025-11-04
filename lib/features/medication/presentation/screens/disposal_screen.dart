@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -15,7 +16,7 @@ class DisposalScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const TabBarView(
-      children: [_NearbyDisposalTab(), _MapViewTab(), _PickupRequestTab()],
+      children: [_NearbyDisposalTab(), _PickupRequestTab()],
     );
   }
 }
@@ -32,7 +33,9 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
   String? _error;
   Position? _pos;
   List<_PlaceView> _places = const [];
+  List<_PlaceView> _allPlaces = const []; // 모든 장소 (필터링 전)
   StreamSubscription<Position>? _positionSub;
+  String _category = 'all'; // 'all', 'pharmacy', 'health', 'hospital'
 
   @override
   void initState() {
@@ -66,9 +69,17 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
       _positionSub =
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(distanceFilter: 200),
-          ).listen((position) {
-            _updatePlacesForPosition(position, fromStream: true);
-          });
+          ).listen(
+            (position) {
+              _updatePlacesForPosition(position, fromStream: true);
+            },
+            onError: (error) {
+              debugPrint('⚠️ 위치 스트림 에러: $error');
+              // 에러가 발생해도 앱이 크래시되지 않도록 처리
+              // 위치 서비스가 비활성화되거나 권한이 거부된 경우
+            },
+            cancelOnError: false,
+          );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -91,14 +102,39 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
         KakaoPlacesService.searchPlaces(query: '보건소', x: x, y: y, radius: 3000),
       ]);
       final Map<String, _PlaceView> merged = {};
-      for (final list in results) {
+      // 각 결과 리스트의 인덱스에 따라 타입 결정 (0: 약국, 1: 병원, 2: 보건소)
+      for (int resultIndex = 0; resultIndex < results.length; resultIndex++) {
+        final list = results[resultIndex];
+        String defaultType;
+        if (resultIndex == 0) {
+          defaultType = '약국';
+        } else if (resultIndex == 1) {
+          defaultType = '병원';
+        } else {
+          defaultType = '보건소';
+        }
+
         for (final p in list) {
           final double distance = Geolocator.distanceBetween(y, x, p.y, p.x);
           if (distance <= 3000) {
+            // 카테고리가 비어있거나 정확히 일치하지 않으면 검색 쿼리 기준으로 타입 설정
+            String placeType = defaultType;
+            if (p.category != null && p.category!.isNotEmpty) {
+              // 카테고리명이 정확히 일치하는 경우 사용
+              if (p.category == '약국' ||
+                  p.category == '병원' ||
+                  p.category == '보건소') {
+                placeType = p.category!;
+              } else {
+                // 일치하지 않으면 검색 쿼리 기준 사용
+                placeType = defaultType;
+              }
+            }
+
             final view = _PlaceView(
               id: p.id,
               name: p.name,
-              type: (p.category ?? '').isEmpty ? '시설' : p.category!,
+              type: placeType,
               address: p.address,
               x: p.x,
               y: p.y,
@@ -116,7 +152,8 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
       if (!mounted) return;
       setState(() {
         _pos = pos;
-        _places = list;
+        _allPlaces = list;
+        _places = _filterPlacesByCategory(list);
         _isLoading = false;
         _error = null;
       });
@@ -151,8 +188,35 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
     return true;
   }
 
+  List<_PlaceView> _filterPlacesByCategory(List<_PlaceView> places) {
+    if (_category == 'all') {
+      return places;
+    }
+    return places.where((place) {
+      if (_category == 'pharmacy') {
+        return place.type == '약국';
+      } else if (_category == 'health') {
+        return place.type == '보건소';
+      } else if (_category == 'hospital') {
+        return place.type == '병원';
+      }
+      return true;
+    }).toList();
+  }
+
+  void _onCategoryChanged(String category) {
+    setState(() {
+      _category = category;
+      _places = _filterPlacesByCategory(_allPlaces);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSizes.md,
@@ -163,17 +227,68 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '가까운 폐의약품 수거처(3km)',
-            style: AppTextStyles.h5.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
+          // 필터
+          Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: Center(
+              child: Wrap(
+                spacing: AppSizes.sm,
+                runSpacing: AppSizes.sm,
+                alignment: WrapAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('전체'),
+                    selected: _category == 'all',
+                    onSelected: (_) => _onCategoryChanged('all'),
+                    selectedColor: AppColors.primary,
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: _category == 'all'
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  ChoiceChip(
+                    label: const Text('약국'),
+                    selected: _category == 'pharmacy',
+                    onSelected: (_) => _onCategoryChanged('pharmacy'),
+                    selectedColor: AppColors.primary,
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: _category == 'pharmacy'
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  ChoiceChip(
+                    label: const Text('보건소'),
+                    selected: _category == 'health',
+                    onSelected: (_) => _onCategoryChanged('health'),
+                    selectedColor: AppColors.primary,
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: _category == 'health'
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  ChoiceChip(
+                    label: const Text('병원'),
+                    selected: _category == 'hospital',
+                    onSelected: (_) => _onCategoryChanged('hospital'),
+                    selectedColor: AppColors.primary,
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: _category == 'hospital'
+                          ? Colors.white
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: AppSizes.lg),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          else if (_error != null)
+          if (_error != null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -314,6 +429,7 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
         return AlertDialog(
           title: Text('${place.name} 길 안내'),
           content: const Text('카카오맵에서 길 안내를 시작할까요?'),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -384,526 +500,6 @@ class _PlaceView {
     required this.y,
     required this.distanceMeters,
   });
-}
-
-class _MapViewTab extends StatelessWidget {
-  const _MapViewTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const _KakaoMapView();
-  }
-}
-
-class _KakaoMapView extends StatefulWidget {
-  const _KakaoMapView();
-
-  @override
-  State<_KakaoMapView> createState() => _KakaoMapViewState();
-}
-
-class _KakaoMapViewState extends State<_KakaoMapView> {
-  bool _isLoading = true;
-  String? _error;
-  Position? _pos;
-  List<_PlaceView> _places = const [];
-  String _category = 'all';
-  String? _selectedPlaceId;
-  StreamSubscription<Position>? _positionSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPlaces();
-  }
-
-  @override
-  void dispose() {
-    _positionSub?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadPlaces({bool forceLocate = false}) async {
-    try {
-      if (mounted) {
-        setState(() {
-          _isLoading = true;
-          _error = null;
-        });
-      }
-
-      final hasPermission = await _ensureLocationPermission();
-      if (!hasPermission) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _error = '위치 권한이 필요합니다.';
-        });
-        return;
-      }
-
-      Position pos;
-      if (!forceLocate && _pos != null) {
-        pos = _pos!;
-      } else {
-        pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.best,
-        );
-      }
-
-      await _updatePlacesForPosition(pos, keepSelection: !forceLocate);
-
-      _positionSub ??=
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(distanceFilter: 200),
-          ).listen((position) {
-            _updatePlacesForPosition(position, fromStream: true);
-          });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = '위치 또는 장소 검색 실패: $e';
-      });
-    }
-  }
-
-  Future<void> _updatePlacesForPosition(
-    Position pos, {
-    bool fromStream = false,
-    bool keepSelection = false,
-  }) async {
-    try {
-      final double x = pos.longitude, y = pos.latitude;
-      final queries = <Future<List<KakaoPlace>>>[];
-      if (_category == 'all' || _category == 'pharmacy') {
-        queries.add(KakaoPlacesService.searchPlaces(query: '약국', x: x, y: y));
-      }
-      if (_category == 'all' || _category == 'hospital') {
-        queries.add(KakaoPlacesService.searchPlaces(query: '병원', x: x, y: y));
-      }
-      if (_category == 'all' || _category == 'health') {
-        queries.add(KakaoPlacesService.searchPlaces(query: '보건소', x: x, y: y));
-      }
-
-      final results = await Future.wait(queries);
-      final Map<String, _PlaceView> merged = {};
-      for (final list in results) {
-        for (final p in list) {
-          final d = Geolocator.distanceBetween(y, x, p.y, p.x);
-          if (d <= 3000) {
-            final view = _PlaceView(
-              id: p.id,
-              name: p.name,
-              type: (p.category ?? '').isEmpty ? '시설' : p.category!,
-              address: p.address,
-              x: p.x,
-              y: p.y,
-              distanceMeters: d,
-            );
-            if (!merged.containsKey(p.id) || d < merged[p.id]!.distanceMeters) {
-              merged[p.id] = view;
-            }
-          }
-        }
-      }
-
-      final list = merged.values.toList()
-        ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-
-      if (!mounted) return;
-      setState(() {
-        _pos = pos;
-        _places = list;
-        _isLoading = false;
-        if (_places.isNotEmpty) {
-          if (!keepSelection ||
-              _selectedPlaceId == null ||
-              !_places.any((p) => p.id == _selectedPlaceId)) {
-            _selectedPlaceId = _places.first.id;
-          }
-        } else {
-          _selectedPlaceId = null;
-        }
-        _error = null;
-      });
-
-      if (fromStream) {
-        debugPrint(
-          '🗺️ 위치 스트림 업데이트 (${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}) - ${list.length}건',
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _error = '위치 또는 장소 검색 실패: $e';
-      });
-    }
-  }
-
-  Future<bool> _ensureLocationPermission() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-      return false;
-    }
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.deniedForever ||
-        permission == LocationPermission.denied) {
-      return false;
-    }
-    return true;
-  }
-
-  _PlaceView? get _selectedPlace {
-    if (_selectedPlaceId == null) return null;
-    for (final p in _places) {
-      if (p.id == _selectedPlaceId) return p;
-    }
-    return null;
-  }
-
-  String? get _staticMapUrl {
-    final double? centerLat = _selectedPlace?.y ?? _pos?.latitude;
-    final double? centerLng = _selectedPlace?.x ?? _pos?.longitude;
-    if (centerLat == null || centerLng == null) return null;
-
-    final markers = <String>[];
-    if (_pos != null) {
-      markers.add(
-        'type:blue|size:small|pos:${_pos!.longitude},${_pos!.latitude}',
-      );
-    }
-    if (_selectedPlace != null) {
-      markers.add(
-        'type:red|size:mid|pos:${_selectedPlace!.x},${_selectedPlace!.y}',
-      );
-    } else {
-      for (final place in _places.take(3)) {
-        markers.add('type:red|size:small|pos:${place.x},${place.y}');
-      }
-    }
-
-    final level = _selectedPlace != null ? 4 : 5;
-    return KakaoPlacesService.buildStaticMapUrl(
-      lat: centerLat,
-      lng: centerLng,
-      markers: markers,
-      level: level,
-      width: 720,
-      height: 360,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppSizes.md),
-          child: Wrap(
-            spacing: AppSizes.sm,
-            children: [
-              ChoiceChip(
-                label: const Text('전체'),
-                selected: _category == 'all',
-                onSelected: (_) {
-                  setState(() => _category = 'all');
-                  _loadPlaces();
-                },
-                selectedColor: AppColors.primary,
-                checkmarkColor: Colors.white,
-              ),
-              ChoiceChip(
-                label: const Text('약국'),
-                selected: _category == 'pharmacy',
-                onSelected: (_) {
-                  setState(() => _category = 'pharmacy');
-                  _loadPlaces();
-                },
-                selectedColor: AppColors.primary,
-                checkmarkColor: Colors.white,
-              ),
-              ChoiceChip(
-                label: const Text('병원'),
-                selected: _category == 'hospital',
-                onSelected: (_) {
-                  setState(() => _category = 'hospital');
-                  _loadPlaces();
-                },
-                selectedColor: AppColors.primary,
-                checkmarkColor: Colors.white,
-              ),
-              ChoiceChip(
-                label: const Text('보건소'),
-                selected: _category == 'health',
-                onSelected: (_) {
-                  setState(() => _category = 'health');
-                  _loadPlaces();
-                },
-                selectedColor: AppColors.primary,
-                checkmarkColor: Colors.white,
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-              ? _buildErrorView()
-              : RefreshIndicator(
-                  onRefresh: () => _loadPlaces(forceLocate: true),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(
-                      left: AppSizes.md,
-                      right: AppSizes.md,
-                      bottom: AppSizes.xl,
-                    ),
-                    itemCount: _places.length + 1,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSizes.md),
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return _buildStaticMapCard();
-                      }
-                      final place = _places[index - 1];
-                      return _buildPlaceTile(place);
-                    },
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorView() {
-    return Padding(
-      padding: const EdgeInsets.all(AppSizes.md),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            _error ?? '지도를 불러올 수 없습니다.',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSizes.md),
-          ElevatedButton(
-            onPressed: _loadPlaces,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('다시 시도'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStaticMapCard() {
-    final url = _staticMapUrl;
-    final selected = _selectedPlace;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(AppSizes.radiusLg),
-              topRight: Radius.circular(AppSizes.radiusLg),
-            ),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: url == null
-                  ? Container(
-                      color: AppColors.borderLight,
-                      child: const Center(child: Text('지도 정보를 불러오는 중입니다.')),
-                    )
-                  : Image.network(
-                      url,
-                      key: ValueKey(url),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppColors.borderLight,
-                        child: const Center(child: Text('지도를 표시할 수 없습니다.')),
-                      ),
-                    ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSizes.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  selected?.name ?? '가까운 폐의약품 수거처',
-                  style: AppTextStyles.h6.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: AppSizes.xs),
-                Text(
-                  selected?.address ?? '목록에서 위치를 선택하면 상세 위치를 확인할 수 있습니다.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceTile(_PlaceView place) {
-    final bool isSelected = place.id == _selectedPlaceId;
-    return GestureDetector(
-      onTap: () {
-        setState(() => _selectedPlaceId = place.id);
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withOpacity(0.08)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        padding: const EdgeInsets.all(AppSizes.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppSizes.radiusRound),
-              ),
-              child: const Icon(Icons.place, color: AppColors.primary),
-            ),
-            const SizedBox(width: AppSizes.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    place.name,
-                    style: AppTextStyles.bodyLarge.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSizes.xs),
-                  Text(
-                    '${place.type} · ${place.address}',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: AppSizes.xs),
-                  Text(
-                    '${(place.distanceMeters / 1000).toStringAsFixed(2)} km',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.directions, color: AppColors.primary),
-              onPressed: () => _showRouteDialog(context, place),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRouteDialog(BuildContext context, _PlaceView place) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('${place.name} 길 안내'),
-          content: const Text('카카오맵에서 길 안내를 시작할까요?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                if (_pos == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('위치 정보를 가져올 수 없습니다.'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-                final double spLat = _pos!.latitude;
-                final double spLng = _pos!.longitude;
-                final String appUrl =
-                    'kakaomap://route?sp=$spLat,$spLng&ep=${place.y},${place.x}&by=FOOT';
-                final String webUrl =
-                    'https://map.kakao.com/link/to/${Uri.encodeComponent(place.name)},${place.y},${place.x}';
-                final Uri appUri = Uri.parse(appUrl);
-                final Uri webUri = Uri.parse(webUrl);
-                try {
-                  if (await canLaunchUrl(appUri)) {
-                    await launchUrl(appUri);
-                  } else {
-                    await launchUrl(
-                      webUri,
-                      mode: LaunchMode.externalApplication,
-                    );
-                  }
-                } catch (_) {
-                  await launchUrl(webUri, mode: LaunchMode.externalApplication);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                splashFactory: NoSplash.splashFactory,
-              ),
-              child: const Text('확인'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _PickupRequestTab extends StatefulWidget {
@@ -1030,12 +626,21 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
             ),
             contentPadding: const EdgeInsets.all(AppSizes.md),
           ),
-          keyboardType: label == '연락처' ? TextInputType.phone : TextInputType.text,
-          inputFormatters: label == '연락처' ? [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-            LengthLimitingTextInputFormatter(13),
-          ] : null,
-          maxLength: label == '연락처' ? 13 : null,
+          keyboardType: label == '연락처'
+              ? TextInputType.phone
+              : TextInputType.text,
+          inputFormatters: label == '연락처'
+              ? [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
+                  LengthLimitingTextInputFormatter(11),
+                ]
+              : null,
+          maxLength: label == '연락처' ? 11 : null,
+          onChanged: (value) {
+            if (label == '연락처' && value.length == 11) {
+              FocusScope.of(context).unfocus();
+            }
+          },
         ),
       ],
     );
@@ -1178,24 +783,145 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
   }
 
   Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now().add(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-    );
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
+    DateTime? picked;
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      // minimumDate와 initialDateTime을 동일한 값으로 설정하여 오류 방지
+      final DateTime now = DateTime.now();
+      final DateTime minimumDate = DateTime(now.year, now.month, now.day + 1);
+      final DateTime maximumDate = DateTime(now.year, now.month, now.day + 30);
+      DateTime selectedDate = minimumDate;
+      picked = await showCupertinoModalPopup<DateTime>(
+        context: context,
+        builder: (context) => Container(
+          height: 216,
+          padding: const EdgeInsets.only(top: 6.0),
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    CupertinoButton(
+                      child: const Text('완료'),
+                      onPressed: () {
+                        Navigator.of(context).pop(selectedDate);
+                      },
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: CupertinoDatePicker(
+                    initialDateTime: minimumDate,
+                    mode: CupertinoDatePickerMode.date,
+                    minimumDate: minimumDate,
+                    maximumDate: maximumDate,
+                    use24hFormat: false,
+                    onDateTimeChanged: (DateTime newDate) {
+                      selectedDate = newDate;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (picked != null) {
+        setState(() {
+          _selectedDate = picked;
+        });
+      }
+    } else {
+      picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now().add(const Duration(days: 1)),
+        firstDate: DateTime.now().add(const Duration(days: 1)),
+        lastDate: DateTime.now().add(const Duration(days: 30)),
+      );
+      if (picked != null) {
+        setState(() {
+          _selectedDate = picked;
+        });
+      }
     }
   }
 
   Future<void> _selectTime() async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
+    TimeOfDay? picked;
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      TimeOfDay selectedTimeOfDay = _selectedTimeOfDay ?? TimeOfDay.now();
+      final DateTime now = DateTime.now();
+      DateTime selectedDateTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        selectedTimeOfDay.hour,
+        selectedTimeOfDay.minute,
+      );
+
+      final DateTime? pickedDateTime = await showCupertinoModalPopup<DateTime>(
+        context: context,
+        builder: (context) {
+          DateTime tempDateTime = selectedDateTime;
+          return Container(
+            height: 216,
+            padding: const EdgeInsets.only(top: 6.0),
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            color: CupertinoColors.systemBackground.resolveFrom(context),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      CupertinoButton(
+                        child: const Text('완료'),
+                        onPressed: () {
+                          Navigator.of(context).pop(tempDateTime);
+                        },
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: CupertinoDatePicker(
+                      initialDateTime: selectedDateTime,
+                      mode: CupertinoDatePickerMode.time,
+                      use24hFormat: false,
+                      onDateTimeChanged: (DateTime newDateTime) {
+                        tempDateTime = newDateTime;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      if (pickedDateTime != null) {
+        picked = TimeOfDay(
+          hour: pickedDateTime.hour,
+          minute: pickedDateTime.minute,
+        );
+      }
+    } else {
+      picked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+    }
+
     if (picked != null) {
       setState(() {
         _selectedTimeOfDay = picked;

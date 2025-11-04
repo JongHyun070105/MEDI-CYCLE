@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { query } from "../database/db.js";
 import { Medication } from "../types/index.js";
+import { registerUser as registerMLUser, getPersonalizedSchedule, getUserStatus } from "../services/mlService.js";
 
 export const registerMedication = async (req: Request, res: Response) => {
   try {
@@ -89,6 +90,63 @@ export const registerMedication = async (req: Request, res: Response) => {
     );
 
     const medication = result.rows[0];
+
+    // ML 서버에 사용자 업데이트 (비동기, 실패해도 계속 진행)
+    // 약 등록 시마다 사용자 정보를 업데이트하되, 이미 등록된 사용자인지 확인
+    try {
+      // 사용자 정보 가져오기
+      const userResult = await query(
+        `SELECT id, name, age, gender FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        
+        // 사용자의 모든 약물 목록 가져오기
+        const allMedicationsResult = await query(
+          `SELECT drug_name FROM medications WHERE user_id = $1`,
+          [userId]
+        );
+        const medications = allMedicationsResult.rows.map((r: any) => r.drug_name);
+
+        // ML 서버에 사용자 등록/업데이트
+        // 먼저 사용자 상태 확인 (이미 등록되었는지 체크)
+        let isRegistered = false;
+        try {
+          await getUserStatus(userId.toString());
+          isRegistered = true;
+        } catch (statusError) {
+          // 사용자가 등록되지 않았거나 오류 발생
+          isRegistered = false;
+        }
+
+        // 사용자가 등록되지 않았거나, 약물 목록이 변경된 경우에만 등록/업데이트
+        if (!isRegistered || medications.length > 0) {
+          try {
+            await registerMLUser(userId.toString(), {
+              user_id: userId.toString(),
+              name: user.name,
+              age: user.age || 30,
+              medications: medications,
+              allergies: [], // TODO: 알레르기 정보 추가
+            });
+            if (isRegistered) {
+              console.log(`✅ ML 서버 사용자 정보 업데이트 완료: 사용자 ${userId}, 약물 ${drug_name}`);
+            } else {
+              console.log(`✅ ML 서버 사용자 등록 완료: 사용자 ${userId}, 약물 ${drug_name}`);
+            }
+          } catch (mlError: any) {
+            console.error("⚠️ ML 서버 사용자 등록/업데이트 실패 (약은 등록됨):", mlError);
+          }
+        } else {
+          console.log(`ℹ️  ML 서버 사용자 이미 등록되어 있고 약물 목록이 동일함: 사용자 ${userId}`);
+        }
+      }
+    } catch (mlError) {
+      console.error("⚠️ ML 서버 사용자 등록 중 오류 (약은 등록됨):", mlError);
+      // ML 서버 오류는 치명적이지 않으므로 계속 진행
+    }
 
     return res.status(201).json({
       message: "약이 등록되었습니다",

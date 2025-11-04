@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import PDFDocument from "pdfkit";
 import { query } from "../database/db.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const generateReport = async (req: Request, res: Response) => {
   try {
@@ -111,7 +117,47 @@ export const generateReport = async (req: Request, res: Response) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     doc.pipe(res);
 
-    // 한글 폰트는 PDFKit 기본 폰트 사용 (UTF-8 지원)
+    // 한글 폰트 설정 시도 (시스템 폰트 경로 사용)
+    // macOS/Linux: /System/Library/Fonts 또는 /usr/share/fonts
+    // Windows: C:/Windows/Fonts
+    // Docker 환경에서는 NotoSansKR 같은 폰트를 직접 추가해야 함
+    
+    let koreanFont: string | null = null;
+    const fontPaths = [
+      // macOS
+      "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+      "/System/Library/Fonts/AppleGothic.ttf",
+      // Linux (일반적인 한글 폰트 경로)
+      "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+      "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+      // Windows (참고용, 서버에서는 일반적으로 사용 안 함)
+      "C:/Windows/Fonts/malgun.ttf",
+      "C:/Windows/Fonts/gulim.ttc",
+    ];
+    
+    for (const fontPath of fontPaths) {
+      try {
+        if (fs.existsSync(fontPath)) {
+          koreanFont = fontPath;
+          doc.registerFont("Korean", fontPath);
+          break;
+        }
+      } catch (e) {
+        // 폰트 로드 실패 시 다음 경로 시도
+        continue;
+      }
+    }
+    
+    // 한글 폰트가 없으면 기본 폰트 사용 (한글이 깨질 수 있음)
+    const useKoreanFont = (text: string) => {
+      if (koreanFont) {
+        doc.font("Korean");
+      } else {
+        // 기본 폰트 사용 (한글은 깨질 수 있음)
+        doc.font("Helvetica");
+      }
+      return text;
+    };
 
     const generatedAt = new Date();
     const formatDate = (d: Date) =>
@@ -121,13 +167,21 @@ export const generateReport = async (req: Request, res: Response) => {
 
     // Header
     doc
-      .fontSize(24)
-      .font("Helvetica-Bold")
-      .text("약드셔유 - 의사 상담용 리포트", { align: "center" });
+      .fontSize(24);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("약드셔유 - 의사 상담용 리포트", { align: "center" });
     doc.moveDown(0.2);
+    doc.fontSize(10);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica");
+    }
     doc
-      .fontSize(10)
-      .font("Helvetica")
       .fillColor("#666")
       .text(
         `생성일시: ${formatDate(generatedAt)}  |  환자 ID: ${u.id ?? "-"}`,
@@ -140,8 +194,13 @@ export const generateReport = async (req: Request, res: Response) => {
     let currentPage = 1;
     const drawFooter = (pageNo: number) => {
       const text = `페이지 ${pageNo}`;
+      doc.fontSize(9);
+      if (koreanFont) {
+        doc.font("Korean");
+      } else {
+        doc.font("Helvetica");
+      }
       doc
-        .fontSize(9)
         .fillColor("#666")
         .text(text, 50, doc.page.height - 40, {
           width: doc.page.width - 100,
@@ -156,12 +215,20 @@ export const generateReport = async (req: Request, res: Response) => {
     });
 
     // Patient Info
-    doc
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text("환자 정보", { underline: true });
+    doc.fontSize(16);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("환자 정보", { underline: true });
     doc.moveDown(0.5);
-    doc.fontSize(12).font("Helvetica");
+    doc.fontSize(12);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica");
+    }
     doc.text(`이름: ${u.name || "-"}`);
     doc.text(`이메일: ${u.email || "-"}`);
     doc.text(`나이: ${u.age ?? "-"}`);
@@ -170,12 +237,20 @@ export const generateReport = async (req: Request, res: Response) => {
     doc.moveDown();
 
     // Adherence
-    doc
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text("최근 90일 복약 성실도", { underline: true });
+    doc.fontSize(16);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("최근 90일 복약 성실도", { underline: true });
     doc.moveDown(0.5);
-    doc.fontSize(12).font("Helvetica");
+    doc.fontSize(12);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica");
+    }
     doc.text(`완료 횟수: ${totalCompleted ?? 0}회`);
     doc.text(`계획 횟수: ${totalPlanned ?? 0}회`);
     doc.text(`성실도: ${overallPct90}%`);
@@ -195,12 +270,20 @@ export const generateReport = async (req: Request, res: Response) => {
     doc.moveDown(2);
 
     // AI 피드백 섹션
-    doc
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text("AI 복약 인사이트", { underline: true });
+    doc.fontSize(16);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("AI 복약 인사이트", { underline: true });
     doc.moveDown(0.5);
-    doc.fontSize(12).font("Helvetica");
+    doc.fontSize(12);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica");
+    }
     if (insightMessage) {
       doc.text("• " + insightMessage);
     }
@@ -215,10 +298,13 @@ export const generateReport = async (req: Request, res: Response) => {
     doc.moveDown();
 
     // Medications (table)
-    doc
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text("현재 복용 중인 약물", { underline: true });
+    doc.fontSize(16);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("현재 복용 중인 약물", { underline: true });
     doc.moveDown(0.5);
 
     const table = {
@@ -232,17 +318,21 @@ export const generateReport = async (req: Request, res: Response) => {
       cells.forEach((c, i) => {
         const w = table.widths[i] || 100;
         if (isHeader) {
-          doc
-            .fontSize(11)
-            .font("Helvetica-Bold")
-            .fillColor("#000")
-            .text(c, x, table.y, { width: w });
+          doc.fontSize(11);
+          if (koreanFont) {
+            doc.font("Korean");
+          } else {
+            doc.font("Helvetica-Bold");
+          }
+          doc.fillColor("#000").text(c, x, table.y, { width: w });
         } else {
-          doc
-            .fontSize(10)
-            .font("Helvetica")
-            .fillColor("#333")
-            .text(c, x, table.y, { width: w });
+          doc.fontSize(10);
+          if (koreanFont) {
+            doc.font("Korean");
+          } else {
+            doc.font("Helvetica");
+          }
+          doc.fillColor("#333").text(c, x, table.y, { width: w });
         }
         x += w + 8;
       });
@@ -289,17 +379,24 @@ export const generateReport = async (req: Request, res: Response) => {
     doc.moveDown(1);
 
     // Clinician notes section & footer note
-    doc
-      .fontSize(16)
-      .font("Helvetica-Bold")
-      .text("의사 메모", { underline: true });
+    doc.fontSize(16);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica-Bold");
+    }
+    doc.text("의사 메모", { underline: true });
     const notesTop = doc.y + 6;
     const notesH = 100;
     doc.rect(50, notesTop, doc.page.width - 100, notesH).stroke("#CCC");
     doc.moveDown(8);
+    doc.fontSize(10);
+    if (koreanFont) {
+      doc.font("Korean");
+    } else {
+      doc.font("Helvetica");
+    }
     doc
-      .fontSize(10)
-      .font("Helvetica")
       .fillColor("#666")
       .text(
         "본 리포트는 사용자 입력 데이터를 기반으로 생성되었습니다. 임상적 판단은 반드시 전문의와 상담하시기 바랍니다.",

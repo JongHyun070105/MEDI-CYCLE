@@ -12,6 +12,7 @@ import 'ai_feedback_screen.dart';
 import 'chatbot_screen.dart';
 import '../../../auth/presentation/screens/settings_screen.dart';
 import '../../../../shared/services/api_client.dart';
+import '../../../../shared/services/notification_service.dart';
 
 class MedicationHomeScreen extends ConsumerStatefulWidget {
   const MedicationHomeScreen({super.key});
@@ -26,10 +27,16 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
   final GlobalKey<_HomeTabState> _homeTabKey = GlobalKey<_HomeTabState>();
   final GlobalKey<_MedicationTabState> _medicationTabKey =
       GlobalKey<_MedicationTabState>();
+  final GlobalKey<MedicationBoxScreenState> _medicationBoxScreenKey =
+      GlobalKey<MedicationBoxScreenState>();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final bool isHomeTabRefreshing = _homeTabKey.currentState?.isRefreshing ?? false;
+    
+    return Stack(
+      children: [
+        Scaffold(
       backgroundColor: const Color(0xFFFFFFFF),
       extendBody: true,
       resizeToAvoidBottomInset: false,
@@ -60,9 +67,17 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         index: _currentIndex,
         children: [
           const _DisposalTab(),
-          _MedicationTab(key: _medicationTabKey),
+          _MedicationTab(
+            key: _medicationTabKey,
+            onMedicationDeleted: () {
+              _homeTabKey.currentState?.refreshAll();
+            },
+            onMedicationUpdated: () {
+              _homeTabKey.currentState?.refreshAll();
+            },
+          ),
           _HomeTab(key: _homeTabKey),
-          const _PharmacyTab(),
+          _PharmacyTab(medicationBoxScreenKey: _medicationBoxScreenKey),
           const _ProfileTab(),
         ],
       ),
@@ -74,9 +89,23 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
+                final int previousIndex = _currentIndex;
             setState(() {
               _currentIndex = index;
             });
+                // 홈 탭으로 이동할 때마다 새로고침 (다른 탭에서만, 챗봇 제외)
+                // 챗봇은 FAB으로 이동하므로 여기서는 처리하지 않음
+                if (index == 2 && previousIndex != 2) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _homeTabKey.currentState?.refreshAll();
+                  });
+                }
+                // 약 상자 탭으로 이동할 때마다 새로고침
+                if (index == 3 && previousIndex != 3) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _medicationBoxScreenKey.currentState?.refresh();
+                  });
+                }
           },
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppColors.primary,
@@ -106,9 +135,9 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
               label: '약 상자',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.psychology_outlined),
-              activeIcon: Icon(Icons.psychology),
-              label: 'AI 피드백',
+              icon: Icon(Icons.insights_outlined),
+              activeIcon: Icon(Icons.insights),
+              label: '인사이트',
             ),
           ],
         ),
@@ -134,11 +163,21 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
               _medicationTabKey.currentState?.addMedication(result);
               _homeTabKey.currentState?.refreshAll();
             }
+                // 약 등록 후 홈 탭으로 자동 이동 및 새로고침
+                if (result != null) {
+                  setState(() {
+                    _currentIndex = 2; // 홈 탭으로 이동
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _homeTabKey.currentState?.refreshAll();
+                  });
+                }
           } else {
-            // 다른 탭일 때는 챗봇으로 이동
-            Navigator.of(context).push(
+                // 다른 탭일 때는 챗봇으로 이동 (새로고침 없이)
+                await Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const ChatbotScreen()),
             );
+                // 챗봇에서 돌아올 때는 새로고침하지 않음 (인디케이터 없이)
           }
         },
         backgroundColor: AppColors.primary,
@@ -149,6 +188,35 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        ),
+
+        // 홈 탭 새로고침 중 전체 화면 오버레이 (Scaffold 전체를 덮음)
+        if (isHomeTabRefreshing && _currentIndex == 2)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: AppSizes.md),
+                    Text(
+                      '데이터를 불러오는 중입니다...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -165,23 +233,79 @@ class _HomeTabState extends State<_HomeTab> {
       GlobalKey<MedicationStatsState>();
   final GlobalKey<_TodayIntakeChecklistState> _checklistKey =
       GlobalKey<_TodayIntakeChecklistState>();
+  final GlobalKey<PillboxStatsState> _pillboxStatsKey =
+      GlobalKey<PillboxStatsState>();
+  bool _isInitialLoading = true;
+  bool _isRefreshing = false;
+  
+  // 외부에서 새로고침 상태 확인용 getter
+  bool get isRefreshing => _isRefreshing;
 
-  void refreshAll() {
-    refreshStats();
-    refreshChecklist();
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
   }
 
-  void refreshStats() {
-    _statsKey.currentState?.refreshStatistics();
+  Future<void> _loadInitialData() async {
+    // 약간의 지연을 주어 모든 컴포넌트가 로딩을 시작하도록 함
+    await Future.delayed(const Duration(milliseconds: 100));
+    // 모든 컴포넌트가 로딩 완료될 때까지 대기
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 500)), // 충분한 시간 대기
+    ]);
+    if (mounted) {
+      setState(() {
+        _isInitialLoading = false;
+      });
+    }
   }
 
-  void refreshChecklist() {
-    _checklistKey.currentState?.refreshChecklist();
+  Future<void> refreshAll() async {
+    if (_isRefreshing) return; // 이미 새로고침 중이면 무시
+    
+    setState(() {
+      _isRefreshing = true;
+    });
+    
+    try {
+      // 통계, 체크리스트, 약상자 상태를 동시에 새로고침
+      await Future.wait([
+        refreshStats(),
+        refreshChecklist(),
+        refreshPillboxStats(),
+      ]);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> refreshStats() async {
+    await _statsKey.currentState?.refreshStatistics();
+  }
+
+  Future<void> refreshChecklist() async {
+    await _checklistKey.currentState?.refreshChecklist();
+  }
+
+  Future<void> refreshPillboxStats() async {
+    await _pillboxStatsKey.currentState?.refresh();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Stack(
+      children: [
+        if (_isInitialLoading)
+          Container(
+            color: Colors.white,
+          )
+        else
+          SingleChildScrollView(
       padding: const EdgeInsets.all(AppSizes.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,51 +330,6 @@ class _HomeTabState extends State<_HomeTab> {
           Row(
             children: [
               Icon(
-                Icons.stacked_line_chart,
-                color: AppColors.textPrimary,
-                size: 20,
-              ),
-              const SizedBox(width: AppSizes.sm),
-              Text(
-                '월별 복용률',
-                style: AppTextStyles.h5.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSizes.md),
-          const _MonthlyAdherenceChart(),
-
-          const SizedBox(height: AppSizes.lg),
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today,
-                color: AppColors.textPrimary,
-                size: 20,
-              ),
-              const SizedBox(width: AppSizes.sm),
-              Text(
-                '오늘의 복약 현황',
-                style: AppTextStyles.h5.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSizes.md),
-          _TodayIntakeChecklist(
-            key: _checklistKey,
-            onChecklistChanged: refreshStats,
-          ),
-
-          const SizedBox(height: AppSizes.lg),
-          Row(
-            children: [
-              Icon(
                 Icons.inventory_2,
                 color: AppColors.textPrimary,
                 size: 20,
@@ -266,17 +345,54 @@ class _HomeTabState extends State<_HomeTab> {
             ],
           ),
           const SizedBox(height: AppSizes.md),
-          const PillboxStats(),
+          PillboxStats(key: _pillboxStatsKey),
+
+          const SizedBox(height: AppSizes.lg),
+          _TodayIntakeChecklist(
+            key: _checklistKey,
+            onChecklistChanged: refreshStats,
+          ),
 
           const SizedBox(height: 150),
         ],
       ),
+    ),
+        // 초기 로딩 중 전체 화면 오버레이
+        if (_isInitialLoading)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                    SizedBox(height: AppSizes.md),
+                    Text(
+                      '데이터를 불러오는 중입니다...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
 class _MedicationTab extends StatefulWidget {
-  const _MedicationTab({super.key});
+  final VoidCallback? onMedicationDeleted;
+  final VoidCallback? onMedicationUpdated;
+
+  const _MedicationTab({super.key, this.onMedicationDeleted, this.onMedicationUpdated});
 
   @override
   State<_MedicationTab> createState() => _MedicationTabState();
@@ -323,18 +439,22 @@ class _MedicationTabState extends State<_MedicationTab> {
   }
 
   void addMedication(Map<String, dynamic> medication) {
-    setState(() {
-      _registeredMedications.insert(0, medication);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('약이 추가되었습니다.'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadMedications();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        // 서버에서 최신 목록 다시 로드
+        await _loadMedications();
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('약이 추가되었습니다.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      } catch (e) {
+        // 에러 발생 시 무시 (이미 dispose된 경우)
+        debugPrint('약 추가 후 새로고침 중 오류: $e');
       }
     });
   }
@@ -489,7 +609,12 @@ class _MedicationTabState extends State<_MedicationTab> {
 
   Widget _buildMedicationList() {
     return ListView.builder(
-      padding: const EdgeInsets.all(AppSizes.md),
+      padding: EdgeInsets.only(
+        left: AppSizes.md,
+        right: AppSizes.md,
+        top: AppSizes.md,
+        bottom: AppSizes.xl * 3, // FAB과 하단 네비게이션 바 고려한 넉넉한 패딩
+      ),
       itemCount: _registeredMedications.length,
       itemBuilder: (context, index) {
         final medication = _registeredMedications[index];
@@ -501,6 +626,20 @@ class _MedicationTabState extends State<_MedicationTab> {
   Widget _buildMedicationCard(Map<String, dynamic> medication, int index) {
     final List<String> times =
         List<String>.from(medication['times'] ?? const <String>[]);
+    // 시간 순서대로 정렬
+    final List<String> sortedTimes = List<String>.from(times);
+    sortedTimes.sort((a, b) {
+      final partsA = a.split(':');
+      final partsB = b.split(':');
+      final hourA = int.tryParse(partsA[0]) ?? 0;
+      final minuteA = partsA.length > 1 ? (int.tryParse(partsA[1]) ?? 0) : 0;
+      final hourB = int.tryParse(partsB[0]) ?? 0;
+      final minuteB = partsB.length > 1 ? (int.tryParse(partsB[1]) ?? 0) : 0;
+      if (hourA != hourB) {
+        return hourA.compareTo(hourB);
+      }
+      return minuteA.compareTo(minuteB);
+    });
     return Card(
       margin: const EdgeInsets.only(bottom: AppSizes.md),
       elevation: 0,
@@ -573,7 +712,7 @@ class _MedicationTabState extends State<_MedicationTab> {
                   child: _buildInfoItem(
                     '복용 횟수',
                     medication['frequency'],
-                    Icons.schedule,
+                    Icons.repeat,
                   ),
                 ),
                 Expanded(
@@ -584,7 +723,7 @@ class _MedicationTabState extends State<_MedicationTab> {
             const SizedBox(height: AppSizes.sm),
             _buildInfoItem(
               '복용 시간',
-              times.isEmpty ? '-' : times.join(', '),
+              sortedTimes.isEmpty ? '-' : sortedTimes.join(', '),
               Icons.access_time,
             ),
             const SizedBox(height: AppSizes.sm),
@@ -629,30 +768,33 @@ class _MedicationTabState extends State<_MedicationTab> {
     );
   }
 
-  void _deleteMedication(int index) {
-    showDialog(
+  void _deleteMedication(int index) async {
+    final medication = _registeredMedications[index];
+    final medicationId = medication['id'] as int?;
+    
+    if (medicationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('약 ID를 찾을 수 없습니다.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('약 삭제'),
-        content: Text('${_registeredMedications[index]['name']}을(를) 삭제하시겠습니까?'),
+        content: Text('${medication['name']}을(를) 삭제하시겠습니까?'),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('취소'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _registeredMedications.removeAt(index);
-              });
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('약이 삭제되었습니다.'),
-                  backgroundColor: AppColors.primary,
-                ),
-              );
-            },
+            onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               splashFactory: NoSplash.splashFactory,
@@ -662,6 +804,44 @@ class _MedicationTabState extends State<_MedicationTab> {
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    try {
+      final api = ApiClient();
+      await api.deleteMedication(medicationId);
+      
+      // 알림 취소
+      try {
+        await notificationService.cancelMedicationNotifications(medicationId);
+      } catch (e) {
+        debugPrint('알림 취소 실패: $e');
+      }
+      
+      // 서버에서 최신 목록 다시 로드
+      await _loadMedications();
+      
+      // 메인 화면 업데이트
+      widget.onMedicationDeleted?.call();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('약이 삭제되었습니다.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('약 삭제 중 오류가 발생했습니다: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildFeatureCard({
@@ -723,10 +903,33 @@ class _MedicationTabState extends State<_MedicationTab> {
     );
   }
 
+  String _formatDate(String dateStr) {
+    if (dateStr.isEmpty || dateStr == '-') return '-';
+    try {
+      final DateTime date = DateTime.parse(dateStr);
+      return '${date.year}년 ${date.month.toString().padLeft(2, '0')}월 ${date.day.toString().padLeft(2, '0')}일';
+    } catch (e) {
+      return dateStr; // 파싱 실패 시 원본 반환
+    }
+  }
+
   Map<String, dynamic> _mapMedication(Map<String, dynamic> medication) {
     final List<dynamic> timesDynamic =
         (medication['dosage_times'] ?? medication['dosageTimes'] ?? []) as List;
     final List<String> times = timesDynamic.map((e) => e.toString()).toList();
+    // 시간 순서대로 정렬
+    times.sort((a, b) {
+      final partsA = a.split(':');
+      final partsB = b.split(':');
+      final hourA = int.tryParse(partsA[0]) ?? 0;
+      final minuteA = partsA.length > 1 ? (int.tryParse(partsA[1]) ?? 0) : 0;
+      final hourB = int.tryParse(partsB[0]) ?? 0;
+      final minuteB = partsB.length > 1 ? (int.tryParse(partsB[1]) ?? 0) : 0;
+      if (hourA != hourB) {
+        return hourA.compareTo(hourB);
+      }
+      return minuteA.compareTo(minuteB);
+    });
     final String startDate =
         (medication['start_date'] ?? medication['startDate'] ?? '')
             .toString();
@@ -743,10 +946,10 @@ class _MedicationTabState extends State<_MedicationTab> {
       'frequency': medication['frequency'] is num
           ? '하루 ${(medication['frequency'] as num).toInt()}회'
           : (medication['frequency']?.toString() ?? '정보 없음'),
-      'startDate': startDate.isEmpty ? '-' : startDate,
+      'startDate': startDate.isEmpty ? '-' : _formatDate(startDate),
       'endDate': isIndefinite
           ? '무기한'
-          : (endDateRaw.isEmpty ? '-' : endDateRaw),
+          : (endDateRaw.isEmpty ? '-' : _formatDate(endDateRaw)),
     };
   }
 }
@@ -757,7 +960,7 @@ class _DisposalTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
@@ -777,7 +980,6 @@ class _DisposalTab extends StatelessWidget {
               ),
               tabs: const [
                 Tab(text: '가까운 수거함'),
-                Tab(text: '지도에서 보기'),
                 Tab(text: '방문 수거 신청'),
               ],
             ),
@@ -790,7 +992,9 @@ class _DisposalTab extends StatelessWidget {
 }
 
 class _PharmacyTab extends StatelessWidget {
-  const _PharmacyTab();
+  final GlobalKey<MedicationBoxScreenState>? medicationBoxScreenKey;
+  
+  const _PharmacyTab({this.medicationBoxScreenKey});
 
   @override
   Widget build(BuildContext context) {
@@ -803,7 +1007,7 @@ class _PharmacyTab extends StatelessWidget {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
-      body: const MedicationBoxScreen(),
+      body: MedicationBoxScreen(key: medicationBoxScreenKey),
     );
   }
 }
@@ -818,7 +1022,7 @@ class _ProfileTab extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('AI 피드백'),
+          title: const Text('인사이트'),
           backgroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -833,8 +1037,8 @@ class _ProfileTab extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
               tabs: const [
-                Tab(text: '월별 복용률'),
-                Tab(text: '평일/주말'),
+                Tab(text: '대시보드'),
+                Tab(text: 'AI'),
               ],
             ),
           ),
@@ -850,6 +1054,7 @@ class _MedicationItem extends StatefulWidget {
   final String name;
   final String time;
   final bool isTaken;
+  final DateTime? intakeTime;
   final VoidCallback? onToggle;
   final Widget? trailing;
 
@@ -857,6 +1062,7 @@ class _MedicationItem extends StatefulWidget {
     required this.name,
     required this.time,
     required this.isTaken,
+    this.intakeTime,
     this.onToggle,
     this.trailing,
   });
@@ -884,31 +1090,37 @@ class _MedicationItemState extends State<_MedicationItem> {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.name,
-                  style: AppTextStyles.bodyLarge.copyWith(
-                    color: _isTaken
-                        ? AppColors.textSecondary
-                        : AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                    decoration: _isTaken ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                const SizedBox(height: AppSizes.xs),
-                Text(
-                  widget.time,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+            child: Text(
+              widget.name,
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: _isTaken
+                    ? AppColors.textSecondary
+                    : AppColors.primary,
+                fontWeight: FontWeight.bold,
+                decoration: _isTaken ? TextDecoration.lineThrough : null,
+              ),
             ),
           ),
           GestureDetector(
             onTap: () {
+              // 복용 시간 10분 전까지는 체크 불가 (복용 완료 후 취소는 가능)
+              if (!_isTaken && widget.intakeTime != null) {
+                final now = DateTime.now();
+                final allowedTime = widget.intakeTime!.subtract(const Duration(minutes: 10));
+                if (now.isBefore(allowedTime)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '복용 시간 10분 전부터 체크할 수 있습니다. (${widget.time})',
+                      ),
+                      backgroundColor: AppColors.warning,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+              }
+
               setState(() {
                 _isTaken = !_isTaken;
               });
@@ -953,13 +1165,6 @@ class _MedicationItemState extends State<_MedicationItem> {
 }
 
 // 구분선 위젯
-Widget _buildDivider() {
-  return Container(
-    height: 1,
-    margin: const EdgeInsets.symmetric(horizontal: AppSizes.md),
-    color: AppColors.border,
-  );
-}
 
 class _MonthlyAdherenceChart extends StatefulWidget {
   const _MonthlyAdherenceChart();
@@ -1017,8 +1222,9 @@ class _MonthlyAdherenceChartState extends State<_MonthlyAdherenceChart> {
 
   @override
   Widget build(BuildContext context) {
+    // 개별 로딩 인디케이터 제거 - 페이지 전체 로딩으로 통합
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const SizedBox.shrink();
     }
     if (_months.isEmpty) {
       return Container(
@@ -1120,6 +1326,7 @@ class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
   bool _isLoading = true;
   List<_PlannedIntake> _items = const [];
   String? _error;
+  Map<String, bool> _expandedGroups = {}; // 시간대별 토글 상태
 
   @override
   void initState() {
@@ -1171,13 +1378,27 @@ class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
           );
         }
       }
+      // 시간 순으로 정렬
+      planned.sort((a, b) => a.intakeTime.compareTo(b.intakeTime));
+      
+      // 시간대별 그룹화 및 기본 확장 상태 설정
+      final Map<String, bool> expandedGroups = {};
+      for (final item in planned) {
+        final timeKey = item.timeLabel;
+        if (!expandedGroups.containsKey(timeKey)) {
+          expandedGroups[timeKey] = true; // 기본적으로 펼쳐진 상태
+        }
+      }
+      
+      if (!mounted) return;
       setState(() {
         _items = planned;
+        _expandedGroups = expandedGroups;
         _isLoading = false;
         _error = null;
       });
-      widget.onChecklistChanged?.call();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _items = const [];
         _isLoading = false;
@@ -1219,8 +1440,132 @@ class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
         intakeTime: p.intakeTime.toIso8601String(),
         isTaken: !p.isTaken,
       );
+      
+      // 통계를 즉시 업데이트 (비동기로 처리하되, 먼저 시작)
+      widget.onChecklistChanged?.call();
+      
+      // 체크리스트도 동시에 새로고침
       await _load();
     } catch (_) {}
+  }
+
+  Widget _buildGroupedChecklist() {
+    // 시간대별로 그룹화
+    final Map<String, List<_PlannedIntake>> grouped = {};
+    for (final item in _items) {
+      final timeKey = item.timeLabel;
+      if (!grouped.containsKey(timeKey)) {
+        grouped[timeKey] = [];
+      }
+      grouped[timeKey]!.add(item);
+    }
+    
+    // 시간대 순서 정렬
+    final sortedTimes = grouped.keys.toList()
+      ..sort((a, b) {
+        final timeA = _composeToday(a);
+        final timeB = _composeToday(b);
+        return timeA.compareTo(timeB);
+      });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sortedTimes.map((timeKey) {
+        final items = grouped[timeKey]!;
+        final isExpanded = _expandedGroups[timeKey] ?? true;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 시간대 헤더 (토글 가능)
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _expandedGroups[timeKey] = !isExpanded;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.md,
+                  vertical: AppSizes.sm,
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      timeKey,
+                      style: AppTextStyles.h6.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 약 목록 (펼쳐져 있을 때만 표시)
+            if (isExpanded)
+              ...items.map((p) {
+                return Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSizes.md,
+                    right: AppSizes.md,
+                    bottom: AppSizes.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: AppSizes.sm),
+                      const Text(
+                        '- ',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Expanded(
+                        child: _MedicationItem(
+                          name: p.medicationName,
+                          time: p.timeLabel,
+                          isTaken: p.isTaken,
+                          intakeTime: p.intakeTime,
+                          onToggle: () => _toggle(p),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.chat,
+                              color: AppColors.primary,
+                            ),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatbotScreen(
+                                    medicationId: p.medicationId,
+                                    medicationName: p.medicationName,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            if (timeKey != sortedTimes.last)
+              const Divider(
+                height: 1,
+                thickness: 1,
+                color: AppColors.border,
+              ),
+          ],
+        );
+      }).toList(),
+    );
   }
 
   @override
@@ -1231,83 +1576,72 @@ class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
         border: Border.all(color: AppColors.border, width: 1.5),
       ),
-      child: _isLoading
-          ? const Padding(
-              padding: EdgeInsets.all(AppSizes.md),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          : (_error != null
-                ? Padding(
-                    padding: const EdgeInsets.all(AppSizes.md),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _error!,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSizes.sm),
-                        ElevatedButton(
-                          onPressed: _load,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            splashFactory: NoSplash.splashFactory,
-                          ),
-                          child: const Text('다시 시도'),
-                        ),
-                      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더
+          Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today,
+                  color: AppColors.textPrimary,
+                  size: 20,
+                ),
+                const SizedBox(width: AppSizes.sm),
+                Text(
+                  '오늘의 복약 현황',
+                  style: AppTextStyles.h5.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 내용
+          if (_isLoading)
+            const SizedBox.shrink() // 개별 로딩 인디케이터 제거
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(AppSizes.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _error!,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
                     ),
-                  )
-                : (_items.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(AppSizes.md),
-                          child: Text(
-                            '등록된 복약 체크 항목이 없습니다.',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemBuilder: (ctx, i) {
-                            final p = _items[i];
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSizes.md,
-                                vertical: AppSizes.sm,
-                              ),
-                              child: _MedicationItem(
-                                name: p.medicationName,
-                                time: p.timeLabel,
-                                isTaken: p.isTaken,
-                                onToggle: () => _toggle(p),
-                                trailing: IconButton(
-                                  icon: const Icon(
-                                    Icons.chat,
-                                    color: AppColors.primary,
-                                  ),
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => ChatbotScreen(
-                                          medicationId: p.medicationId,
-                                          medicationName: p.medicationName,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            );
-                          },
-                          separatorBuilder: (_, __) => _buildDivider(),
-                          itemCount: _items.length,
-                        ))),
+                  ),
+                  const SizedBox(height: AppSizes.sm),
+                  ElevatedButton(
+                    onPressed: _load,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      splashFactory: NoSplash.splashFactory,
+                    ),
+                    child: const Text('다시 시도'),
+                  ),
+                ],
+              ),
+            )
+          else if (_items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(AppSizes.md),
+              child: Text(
+                '등록된 복약 체크 항목이 없습니다.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            )
+          else
+            _buildGroupedChecklist(),
+        ],
+      ),
     );
   }
 }

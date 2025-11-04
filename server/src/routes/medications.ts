@@ -17,6 +17,10 @@ import {
   getChatHistory,
   deleteChatHistory,
 } from "../controllers/chatbotController.js";
+import {
+  submitFeedback,
+  getPersonalizedMedicationSchedule,
+} from "../controllers/feedbackController.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { getMonthlyAdherence } from "../controllers/statsController.js";
 import { getHealthInsights } from "../controllers/insightsController.js";
@@ -48,5 +52,9 @@ router.delete("/chat/history", deleteChatHistory);
 router.get("/stats/adherence/monthly", getMonthlyAdherence);
 router.get("/stats/insights", getHealthInsights);
 router.get("/report/pdf", generateReport);
+
+// Feedback routes (ML 모델 통합)
+router.post("/:id/feedback", submitFeedback);
+router.get("/personalized-schedule", getPersonalizedMedicationSchedule);
 
 export default router;

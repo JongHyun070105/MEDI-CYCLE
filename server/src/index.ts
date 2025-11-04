@@ -4,6 +4,7 @@ import bodyParser from "body-parser";
 import "dotenv/config.js";
 import authRoutes from "./routes/auth.js";
 import medicationRoutes from "./routes/medications.js";
+import pillboxRoutes from "./routes/pillbox.js";
 import { query as dbQuery } from "./database/db.js";
 
 const app: Express = express();
@@ -68,6 +69,7 @@ app.get("/health", (req: Request, res: Response) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/medications", medicationRoutes);
+app.use("/api/pillbox", pillboxRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

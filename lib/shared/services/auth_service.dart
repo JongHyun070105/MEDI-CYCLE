@@ -30,12 +30,18 @@ class AuthService {
   }
 
   /// 로그인
-  Future<AuthResponse> login(UserLoginRequest request) async {
+  Future<AuthResponse> login(UserLoginRequest request, {bool? autoLogin}) async {
     try {
       print('🔍 AuthService.login 시작');
+      final requestData = request.toJson();
+      // auto_login 필드를 요청에 추가
+      if (autoLogin != null) {
+        requestData['auto_login'] = autoLogin;
+      }
+      
       final response = await _apiService.post<Map<String, dynamic>>(
         '/api/auth/login',
-        data: request.toJson(),
+        data: requestData,
       );
 
       print('🔍 AuthService.login 응답 데이터: ${response.data}');
@@ -53,6 +59,17 @@ class AuthService {
       final Map<String, dynamic> userJson =
           (data['user'] as Map<String, dynamic>?) ?? <String, dynamic>{};
       final user = User.fromJson(userJson);
+
+      // 서버 응답에서 auto_login 값 확인 및 로컬 저장
+      // 규칙: 사용자가 ON으로 설정한 경우 서버가 false를 반환해도 끄지 않음 (사용자 우선)
+      try {
+        final localPref = await ApiClient().getAutoLoginEnabled();
+        final serverAutoLogin = (data['auto_login'] ?? userJson['auto_login']) as bool?;
+        final bool newValue = serverAutoLogin == null
+            ? (autoLogin ?? localPref)
+            : (serverAutoLogin || localPref || (autoLogin ?? false));
+        await ApiClient().setAutoLoginEnabled(newValue);
+      } catch (_) {}
 
       // 토큰 저장 및 AuthResponse 구성
       _apiService.setToken(token);
@@ -85,7 +102,29 @@ class AuthService {
       final response = await _apiService.get<Map<String, dynamic>>(
         '/api/auth/profile',
       );
-      return User.fromJson(response.data!);
+      final data = response.data!;
+
+      // 프로필 응답에서 auto_login 값 확인 및 로컬 저장
+      final userData = data['user'] as Map<String, dynamic>?;
+      if (userData != null) {
+        final serverAutoLogin = userData['auto_login'] as bool?;
+        try {
+          final localPref = await ApiClient().getAutoLoginEnabled();
+          if (serverAutoLogin == null) {
+            // 서버가 주지 않으면 기존 값 유지
+            await ApiClient().setAutoLoginEnabled(localPref);
+          } else {
+            // 사용자 설정을 우선: 한번 ON이면 서버 false로 덮지 않음
+            await ApiClient().setAutoLoginEnabled(serverAutoLogin || localPref);
+          }
+        } catch (_) {}
+
+        // user 객체 반환
+        return User.fromJson(userData);
+      }
+
+      // fallback: data를 직접 파싱
+      return User.fromJson(data);
     } catch (e) {
       if (e is ApiException) rethrow;
       throw Exception('사용자 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');

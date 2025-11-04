@@ -47,6 +47,9 @@ _$MedicationImpl _$$MedicationImplFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['endDate'] as String),
       isIndefinite: json['isIndefinite'] as bool,
+      expirationDate: json['expirationDate'] == null
+          ? null
+          : DateTime.parse(json['expirationDate'] as String),
       notes: json['notes'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
@@ -79,6 +82,7 @@ Map<String, dynamic> _$$MedicationImplToJson(_$MedicationImpl instance) =>
       'startDate': instance.startDate.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
       'isIndefinite': instance.isIndefinite,
+      'expirationDate': instance.expirationDate?.toIso8601String(),
       'notes': instance.notes,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
@@ -135,6 +139,9 @@ _$MedicationCreateRequestImpl _$$MedicationCreateRequestImplFromJson(
           ? null
           : DateTime.parse(json['endDate'] as String),
       isIndefinite: json['isIndefinite'] as bool? ?? false,
+      expirationDate: json['expirationDate'] == null
+          ? null
+          : DateTime.parse(json['expirationDate'] as String),
       notes: json['notes'] as String?,
     );
 
@@ -164,6 +171,7 @@ Map<String, dynamic> _$$MedicationCreateRequestImplToJson(
       'startDate': instance.startDate.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
       'isIndefinite': instance.isIndefinite,
+      'expirationDate': instance.expirationDate?.toIso8601String(),
       'notes': instance.notes,
     };
 
@@ -209,6 +217,9 @@ _$MedicationUpdateRequestImpl _$$MedicationUpdateRequestImplFromJson(
           ? null
           : DateTime.parse(json['endDate'] as String),
       isIndefinite: json['isIndefinite'] as bool?,
+      expirationDate: json['expirationDate'] == null
+          ? null
+          : DateTime.parse(json['expirationDate'] as String),
       notes: json['notes'] as String?,
     );
 
@@ -238,5 +249,6 @@ Map<String, dynamic> _$$MedicationUpdateRequestImplToJson(
       'startDate': instance.startDate?.toIso8601String(),
       'endDate': instance.endDate?.toIso8601String(),
       'isIndefinite': instance.isIndefinite,
+      'expirationDate': instance.expirationDate?.toIso8601String(),
       'notes': instance.notes,
     };

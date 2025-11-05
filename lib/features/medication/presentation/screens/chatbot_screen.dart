@@ -85,198 +85,180 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       }
     });
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('AI 챗봇'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-            onPressed: () {
-              ref.read(chatControllerProvider.notifier).clearMessages();
-            },
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
-        child: Column(
-          children: [
-            // 채팅 메시지 리스트
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(AppSizes.md),
-                itemCount: chatState.messages.isEmpty
-                    ? 1
-                    : chatState.messages.length,
-                itemBuilder: (context, index) {
-                  if (chatState.messages.isEmpty) {
-                    return _buildWelcomeMessage();
-                  }
-                  return _buildMessageBubble(chatState.messages[index]);
+    return Stack(
+      children: [
+        Scaffold(
+          resizeToAvoidBottomInset: true,
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: const Text('AI 챗봇'),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios,
+                color: AppColors.textPrimary,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
+                onPressed: () {
+                  ref.read(chatControllerProvider.notifier).clearMessages();
                 },
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
               ),
-            ),
-
-            // 추천 질문 칩 (입력창 위) - 텍스트 입력 시 숨김
-            if (_showSuggestedQuestions && _messageController.text.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.md,
-                vertical: AppSizes.sm,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: AppColors.border)),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _buildSuggestedQuestions()
-                      .map(
-                        (q) => Padding(
-                          padding: const EdgeInsets.only(right: AppSizes.sm),
-                          child: ActionChip(
-                            label: Text(
-                              q,
-                              style: AppTextStyles.caption.copyWith(
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            backgroundColor: AppColors.surface,
-                            side: BorderSide(color: AppColors.border),
-                            onPressed: chatState.isLoading ? null : () => _sendMessage(preset: q),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-
-            // 메시지 입력 영역 (하단 버튼 겹침 방지: SafeArea + padding)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSizes.md,
-                  AppSizes.sm,
-                  AppSizes.md,
-                  AppSizes.md,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        decoration: InputDecoration(
-                          hintText: '메시지를 입력하세요...',
-                          hintStyle: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppSizes.radiusLg,
-                            ),
-                            borderSide: BorderSide(color: AppColors.border),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppSizes.radiusLg,
-                            ),
-                            borderSide: BorderSide(color: AppColors.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppSizes.radiusLg,
-                            ),
-                            borderSide: BorderSide(color: AppColors.primary),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: AppSizes.md,
-                            vertical: AppSizes.sm,
-                          ),
-                        ),
-                        maxLines: null,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _sendMessage(),
-                        onChanged: (value) {
-                          setState(() {
-                            _showSuggestedQuestions = value.isEmpty;
-                          });
-                        },
-                        enabled: !chatState.isLoading,
-                      ),
-                    ),
-                    const SizedBox(width: AppSizes.sm),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(
-                          AppSizes.radiusRound,
-                        ),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.send, color: Colors.white),
-                        onPressed: chatState.isLoading
-                            ? null
-                            : () => _sendMessage(),
-                        splashColor: Colors.transparent,
-                        highlightColor: Colors.transparent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+            ],
           ),
-
-          // 메시지 전송 중 전체 화면 오버레이
-          if (chatState.isLoading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.5),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      SizedBox(height: AppSizes.md),
-                      Text(
-                        '메시지를 전송하는 중입니다...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+          body: SafeArea(
+            child: Column(
+              children: [
+                // 채팅 메시지 리스트
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(AppSizes.md),
+                    itemCount: chatState.messages.isEmpty
+                        ? 1
+                        : chatState.messages.length,
+                    itemBuilder: (context, index) {
+                      if (chatState.messages.isEmpty) {
+                        return _buildWelcomeMessage();
+                      }
+                      return _buildMessageBubble(chatState.messages[index]);
+                    },
                   ),
                 ),
-              ),
+
+                // 추천 질문 칩 (입력창 위) - 텍스트 입력 시 숨김
+                if (_showSuggestedQuestions && _messageController.text.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSizes.md,
+                      vertical: AppSizes.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border(top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _buildSuggestedQuestions()
+                            .map(
+                              (q) => Padding(
+                                padding: const EdgeInsets.only(
+                                  right: AppSizes.sm,
+                                ),
+                                child: ActionChip(
+                                  label: Text(
+                                    q,
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  backgroundColor: AppColors.surface,
+                                  side: BorderSide(color: AppColors.border),
+                                  onPressed: chatState.isLoading
+                                      ? null
+                                      : () => _sendMessage(preset: q),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+
+                // 메시지 입력 영역 (하단 버튼 겹침 방지: SafeArea + padding)
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSizes.md,
+                      AppSizes.sm,
+                      AppSizes.md,
+                      AppSizes.md,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: InputDecoration(
+                              hintText: '메시지를 입력하세요...',
+                              hintStyle: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSizes.radiusLg,
+                                ),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSizes.radiusLg,
+                                ),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSizes.radiusLg,
+                                ),
+                                borderSide: BorderSide(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: AppSizes.md,
+                                vertical: AppSizes.sm,
+                              ),
+                            ),
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendMessage(),
+                            onChanged: (value) {
+                              setState(() {
+                                _showSuggestedQuestions = value.isEmpty;
+                              });
+                            },
+                            enabled: !chatState.isLoading,
+                          ),
+                        ),
+                        const SizedBox(width: AppSizes.sm),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusRound,
+                            ),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.send, color: Colors.white),
+                            onPressed: chatState.isLoading
+                                ? null
+                                : () => _sendMessage(),
+                            splashColor: Colors.transparent,
+                            highlightColor: Colors.transparent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 

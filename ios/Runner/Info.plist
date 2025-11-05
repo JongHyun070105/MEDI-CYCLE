@@ -55,5 +55,10 @@
 	<array>
 		<string>kakaomap</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>스마트 약상자와 통신하기 위해 로컬 네트워크 접근이 필요합니다.</string>
+	<key>NSBonjourServices</key>
+	<array>
+	</array>
 </dict>
 </plist>

@@ -368,7 +368,7 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
           ],
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               width: 48,

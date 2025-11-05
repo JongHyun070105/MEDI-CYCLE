@@ -4,23 +4,28 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 // Open file is optional; fallback to no-op if unavailable
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_sizes.dart';
 import '../../../../shared/services/api_client.dart';
 import '../../../../shared/services/consent_service.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_sizes.dart';
-import '../../../../core/constants/app_text_styles.dart';
 
 class AiFeedbackScreen extends StatefulWidget {
   const AiFeedbackScreen({super.key});
 
   @override
-  State<AiFeedbackScreen> createState() => _AiFeedbackScreenState();
+  State<AiFeedbackScreen> createState() => AiFeedbackScreenState();
 }
 
-class _AiFeedbackScreenState extends State<AiFeedbackScreen> {
+class AiFeedbackScreenState extends State<AiFeedbackScreen> {
   bool _hasConsent = false;
   bool _isCheckingConsent = true;
+  final GlobalKey<_AiTabState> _aiTabKey = GlobalKey<_AiTabState>();
+  
+  // 외부에서 _aiTabKey 접근 가능하도록 getter 추가
+  GlobalKey<_AiTabState> get aiTabKey => _aiTabKey;
 
   @override
   void initState() {
@@ -144,7 +149,7 @@ class _AiFeedbackScreenState extends State<AiFeedbackScreen> {
       );
     }
 
-    return const TabBarView(children: [_DashboardTab(), _AiTab()]);
+    return TabBarView(children: [const _DashboardTab(), _AiTab(key: _aiTabKey)]);
   }
 }
 
@@ -159,6 +164,8 @@ class _DashboardTabState extends State<_DashboardTab> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _months = const [];
   List<Map<String, dynamic>> _weeklyData = const [];
+  int? _selectedWeekdayIndex; // 선택된 요일 인덱스
+  int? _selectedMonthIndex; // 선택된 월 인덱스
   int _overallPct = 0;
   int _latestMonthPct = 0;
   int _previousMonthPct = 0;
@@ -172,8 +179,19 @@ class _DashboardTabState extends State<_DashboardTab> {
   Future<void> _load() async {
     try {
       final api = ApiClient();
+      
+      // 월별 복용률 데이터 직접 조회
+      final monthlyData = await api.getMonthlyAdherenceStats();
+      final monthsRaw = List<Map<String, dynamic>>.from(monthlyData['months'] ?? []);
+      
+      // 디버깅: API 응답 확인
+      debugPrint('📡 API 응답 전체: $monthlyData');
+      debugPrint('📡 monthsRaw 개수: ${monthsRaw.length}');
+      debugPrint('📡 monthsRaw 첫 5개: ${monthsRaw.take(5).toList()}');
+      debugPrint('📡 monthsRaw 마지막 5개: ${monthsRaw.skip(monthsRaw.length - 5).take(5).toList()}');
+      
+      // 전체 인사이트 데이터도 조회 (overallPct 등)
       final insights = await api.getHealthInsights();
-      final monthsRaw = List<Map<String, dynamic>>.from(insights['months'] ?? []);
       // 1~12월 고정 배열 생성 (기본 0%)
       final List<Map<String, dynamic>> months = List.generate(12, (i) {
         return {
@@ -186,6 +204,7 @@ class _DashboardTabState extends State<_DashboardTab> {
         final String raw = (m['month'] ?? '').toString();
         String mmStr;
         if (raw.contains('-') && raw.length >= 7) {
+          // "2025-01" 형식에서 "01" 추출
           mmStr = raw.substring(5, 7);
         } else if (raw.length >= 2) {
           mmStr = raw.substring(raw.length - 2);
@@ -193,30 +212,53 @@ class _DashboardTabState extends State<_DashboardTab> {
           mmStr = raw;
         }
         final int? mm = int.tryParse(mmStr);
-        final int pct = int.tryParse(
-              (m['pct'] ?? m['adherence_pct'] ?? 0).toString(),
-            ) ??
-            0;
-        if (mm != null && mm >= 1 && mm <= 12) {
-          months[mm - 1] = {'month': mmStr.padLeft(2, '0'), 'pct': pct};
-        }
+        if (mm == null || mm < 1 || mm > 12) continue;
+        
+        // adherence_pct 우선, 없으면 pct 사용
+        final dynamic pctValue = m['adherence_pct'] ?? m['pct'] ?? 0;
+        final int pct = pctValue is int 
+            ? pctValue 
+            : (int.tryParse(pctValue.toString()) ?? 0);
+        
+        // 디버깅: 파싱된 값 확인
+        debugPrint('📅 월별 데이터 파싱: month=$raw, mmStr=$mmStr, mm=$mm, pctValue=$pctValue, pct=$pct');
+        
+        months[mm - 1] = {'month': mmStr.padLeft(2, '0'), 'pct': pct};
       }
+      
+      // 디버깅: 최종 months 배열 확인
+      debugPrint('📊 최종 months 배열: ${months.map((m) => '${m['month']}: ${m['pct']}%').join(', ')}');
       final int overall =
           int.tryParse((insights['overallPct'] ?? 0).toString()) ?? 0;
-      final int latest = months.isNotEmpty ? months.last['pct'] as int : 0;
-      final int previous = months.length > 1
-          ? months[months.length - 2]['pct'] as int
+      
+      // 현재 월의 인덱스 계산 (0-based)
+      final DateTime now = DateTime.now();
+      final int currentMonthIndex = now.month - 1; // 0~11
+      
+      // 현재 월의 복약률
+      final int latest = months.isNotEmpty && currentMonthIndex < months.length
+          ? months[currentMonthIndex]['pct'] as int
+          : 0;
+      
+      // 이전 월의 복약률 (현재 월이 1월이면 전년 12월, 아니면 현재-1)
+      final int previousMonthIndex = currentMonthIndex > 0 
+          ? currentMonthIndex - 1 
+          : 11; // 1월이면 전년 12월
+      final int previous = months.isNotEmpty && previousMonthIndex < months.length
+          ? months[previousMonthIndex]['pct'] as int
           : latest;
 
-      // 일주일 복용률 데이터 계산
+      // 일주일 복용률 데이터 계산 (항상 월화수목금토일 순서로 고정)
       final DateTime today = DateTime.now();
-      final DateTime weekAgo = today.subtract(const Duration(days: 6));
-      final startOfWeek = DateTime(weekAgo.year, weekAgo.month, weekAgo.day);
-      final endOfWeek = DateTime(today.year, today.month, today.day, 23, 59, 59);
+      // 현재 날짜 기준으로 가장 가까운 월요일 찾기
+      final int daysFromMonday = today.weekday - 1; // 0=월요일, 6=일요일
+      final DateTime mondayOfWeek = today.subtract(Duration(days: daysFromMonday));
+      final startOfWeek = DateTime(mondayOfWeek.year, mondayOfWeek.month, mondayOfWeek.day);
+      final endOfWeek = startOfWeek.add(const Duration(days: 6));
 
       final intakesResponse = await api.getMedicationIntakes(
         startDate: startOfWeek.toIso8601String(),
-        endDate: endOfWeek.toIso8601String(),
+        endDate: DateTime(endOfWeek.year, endOfWeek.month, endOfWeek.day, 23, 59, 59).toIso8601String(),
       );
       final intakes = List<Map<String, dynamic>>.from(
         intakesResponse['intakes'] ?? [],
@@ -228,13 +270,12 @@ class _DashboardTabState extends State<_DashboardTab> {
         medsResponse['medications'] ?? [],
       );
 
-      // 일주일 데이터 계산 (월화수목금토일)
+      // 일주일 데이터 계산 (항상 월화수목금토일 순서로 고정)
       final List<Map<String, dynamic>> weekly = [];
-      final weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+      final weekdays = ['월', '화', '수', '목', '금', '토', '일']; // 고정된 요일 레이블
       for (int i = 0; i < 7; i++) {
         final date = startOfWeek.add(Duration(days: i));
-        final dayOfWeek = date.weekday; // 1=월요일, 7=일요일
-        final weekdayLabel = weekdays[dayOfWeek - 1];
+        final weekdayLabel = weekdays[i]; // 항상 월화수목금토일 순서로 고정
 
         // 해당 날짜의 활성 약만 집계
         int planned = 0;
@@ -276,26 +317,48 @@ class _DashboardTabState extends State<_DashboardTab> {
         });
       }
 
-      // 최근 3개월 평균 계산 (실제 최근 3개월 데이터 평균)
+      // 최근 3개월 평균 계산 (현재 월 기준으로 최근 3개월: 9, 10, 11월)
       int recent3MonthsSum = 0;
       int recent3MonthsCount = 0;
-      if (months.length >= 3) {
-        for (int i = months.length - 3; i < months.length; i++) {
-          final pct = months[i]['pct'] as int;
-          recent3MonthsSum += pct;
-          recent3MonthsCount++;
+      final int currentMonth = now.month; // 1~12
+      
+      // 현재 월부터 역순으로 3개월 계산 (현재가 11월이면 9, 10, 11월)
+      for (int offset = 0; offset < 3; offset++) {
+        int targetMonth = currentMonth - offset;
+        
+        // 0 이하가 되면 전년도로
+        if (targetMonth <= 0) {
+          targetMonth += 12;
+        }
+        
+        // 해당 월의 인덱스 (0-based)
+        final int monthIndex = targetMonth - 1;
+        
+        if (monthIndex >= 0 && monthIndex < months.length) {
+          final pct = months[monthIndex]['pct'] as int;
+          // 실제 데이터가 있는 경우만 집계
+          final String monthStr = months[monthIndex]['month'] as String;
+          if (monthStr == targetMonth.toString().padLeft(2, '0')) {
+            recent3MonthsSum += pct;
+            recent3MonthsCount++;
+          }
         }
       }
+      
       final int recent3MonthsAvg = recent3MonthsCount > 0
           ? (recent3MonthsSum / recent3MonthsCount).round()
           : overall;
 
+      // 오늘 날짜의 인덱스 계산 (월요일 기준 0부터 시작)
+      final int todayIndex = today.weekday - 1; // 0=월요일, 6=일요일
+      
       setState(() {
         _months = months;
         _weeklyData = weekly;
         _overallPct = recent3MonthsAvg;
         _latestMonthPct = latest;
         _previousMonthPct = previous;
+        _selectedWeekdayIndex = todayIndex; // 오늘 날짜를 기본으로 선택
         _isLoading = false;
       });
     } catch (_) {
@@ -319,7 +382,7 @@ class _DashboardTabState extends State<_DashboardTab> {
         AppSizes.md,
         AppSizes.md,
         AppSizes.md,
-        AppSizes.xl * 2, // 하단 패딩 추가
+        150, // FAB 버튼을 위한 하단 패딩 추가
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +392,7 @@ class _DashboardTabState extends State<_DashboardTab> {
           _buildWeeklyChart(),
           const SizedBox(height: AppSizes.md),
           _buildMonthlyChart(),
-          const SizedBox(height: AppSizes.xl), // 하단 여백 추가
+          const SizedBox(height: 100), // FAB 버튼을 위한 하단 여백 추가
         ],
       ),
     );
@@ -469,6 +532,14 @@ class _DashboardTabState extends State<_DashboardTab> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(width: AppSizes.xs),
+              Text(
+                '2025년',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSizes.md),
@@ -490,9 +561,75 @@ class _DashboardTabState extends State<_DashboardTab> {
                 // 차트 영역
                 SizedBox(
                   height: 180,
-                  child: CustomPaint(
-                    painter: _LineChartPainter(_months),
-                    size: Size.infinite,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return GestureDetector(
+                        onTapDown: (details) {
+                          // 클릭 위치 (차트 위젯 기준)
+                          final clickX = details.localPosition.dx;
+                          final clickY = details.localPosition.dy;
+                          
+                          // 차트 영역 내인지 확인
+                          const chartPadding = 40.0;
+                          const chartTopPadding = 20.0;
+                          const chartHeight = 180.0 - 40.0;
+                          final chartWidth = constraints.maxWidth;
+                          
+                          // 차트 영역 밖이면 무시
+                          if (clickX < chartPadding || 
+                              clickX > (chartWidth - 20) ||
+                              clickY < chartTopPadding ||
+                              clickY > (chartTopPadding + chartHeight)) {
+                            setState(() {
+                              _selectedMonthIndex = null;
+                            });
+                            return;
+                          }
+                          
+                          // 가장 가까운 데이터 포인트 찾기
+                          final monthCount = _months.length;
+                          final xDivisor = (monthCount > 1) ? (monthCount - 1) : 1;
+                          final effectiveWidth = chartWidth - 60;
+                          
+                          int closestIndex = 0;
+                          double minDistance = double.infinity;
+                          
+                          for (int i = 0; i < monthCount; i++) {
+                            final pointX = chartPadding + effectiveWidth * (i / xDivisor);
+                            final distance = (clickX - pointX).abs();
+                            if (distance < minDistance) {
+                              minDistance = distance;
+                              closestIndex = i;
+                            }
+                          }
+                          
+                          // 클릭 허용 범위 내인지 확인 (포인트 주변 30px)
+                          final closestPointX = chartPadding + effectiveWidth * (closestIndex / xDivisor);
+                          if ((clickX - closestPointX).abs() <= 30) {
+                            setState(() {
+                              // 같은 월을 다시 클릭하면 선택 해제, 다른 월 클릭하면 해당 월로 변경
+                              if (_selectedMonthIndex == closestIndex) {
+                                _selectedMonthIndex = null;
+                              } else {
+                                _selectedMonthIndex = closestIndex;
+                              }
+                            });
+                          } else {
+                            // 차트 영역 밖 클릭 시 선택 해제
+                            setState(() {
+                              _selectedMonthIndex = null;
+                            });
+                          }
+                        },
+                        child: CustomPaint(
+                          painter: _LineChartPainter(
+                            _months,
+                            selectedIndex: _selectedMonthIndex,
+                          ),
+                          size: Size.infinite,
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: AppSizes.sm),
@@ -585,21 +722,98 @@ class _DashboardTabState extends State<_DashboardTab> {
                 // 차트 영역
                 SizedBox(
                   height: 180,
-                  child: CustomPaint(
-                    painter: _WeeklyChartPainter(_weeklyData),
-                    size: Size.infinite,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return GestureDetector(
+                        onTapDown: (details) {
+                          // 클릭 위치 (차트 위젯 기준)
+                          final clickX = details.localPosition.dx;
+                          final clickY = details.localPosition.dy;
+                          
+                          // 차트 영역 내인지 확인
+                          const chartPadding = 40.0;
+                          const chartTopPadding = 20.0;
+                          const chartHeight = 180.0 - 40.0;
+                          final chartWidth = constraints.maxWidth;
+                          
+                          // 차트 영역 밖이면 무시
+                          if (clickX < chartPadding || 
+                              clickX > (chartWidth - 20) ||
+                              clickY < chartTopPadding ||
+                              clickY > (chartTopPadding + chartHeight)) {
+                            setState(() {
+                              _selectedWeekdayIndex = null;
+                            });
+                            return;
+                          }
+                          
+                          // 가장 가까운 데이터 포인트 찾기
+                          final dayCount = _weeklyData.length;
+                          final xDivisor = (dayCount > 1) ? (dayCount - 1) : 1;
+                          final effectiveWidth = chartWidth - 60;
+                          
+                          int closestIndex = 0;
+                          double minDistance = double.infinity;
+                          
+                          for (int i = 0; i < dayCount; i++) {
+                            final pointX = chartPadding + effectiveWidth * (i / xDivisor);
+                            final distance = (clickX - pointX).abs();
+                            if (distance < minDistance) {
+                              minDistance = distance;
+                              closestIndex = i;
+                            }
+                          }
+                          
+                          // 클릭 허용 범위 내인지 확인 (포인트 주변 30px)
+                          final closestPointX = chartPadding + effectiveWidth * (closestIndex / xDivisor);
+                          if ((clickX - closestPointX).abs() <= 30) {
+                            setState(() {
+                              // 같은 요일을 다시 클릭하면 선택 해제, 다른 요일 클릭하면 해당 요일로 변경
+                              if (_selectedWeekdayIndex == closestIndex) {
+                                _selectedWeekdayIndex = null;
+                              } else {
+                                _selectedWeekdayIndex = closestIndex;
+                              }
+                            });
+                          } else {
+                            // 차트 영역 밖 클릭 시 선택 해제
+                            setState(() {
+                              _selectedWeekdayIndex = null;
+                            });
+                          }
+                        },
+                        child: CustomPaint(
+                          painter: _WeeklyChartPainter(
+                            _weeklyData,
+                            selectedIndex: _selectedWeekdayIndex,
+                            todayIndex: DateTime.now().weekday - 1, // 오늘 날짜 인덱스
+                          ),
+                          size: Size.infinite,
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: AppSizes.sm),
-                // 요일 레이블
+                // 요일 레이블 (토요일=파란색, 일요일=빨간색)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: _weeklyData.map((d) {
                     final String day = (d['day'] ?? '').toString();
+                    final bool isSaturday = day == '토';
+                    final bool isSunday = day == '일';
+                    
+                    // 색상 결정: 토요일=파란색, 일요일=빨간색, 기본=textSecondary
+                    final Color labelColor = isSaturday
+                        ? Colors.blue
+                        : isSunday
+                            ? Colors.red
+                            : AppColors.textSecondary;
+                    
                     return Text(
                       day,
                       style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
+                        color: labelColor,
                       ),
                     );
                   }).toList(),
@@ -613,7 +827,7 @@ class _DashboardTabState extends State<_DashboardTab> {
 }
 
 class _AiTab extends StatefulWidget {
-  const _AiTab();
+  const _AiTab({super.key});
 
   @override
   State<_AiTab> createState() => _AiTabState();
@@ -625,6 +839,9 @@ class _AiTabState extends State<_AiTab> {
   List<String> _tips = const [];
   bool _isGeneratingReport = false;
   String? _lastReportPath;
+  
+  // 외부에서 로딩 상태 확인 (오버레이 표시용)
+  bool get isGeneratingReport => _isGeneratingReport;
 
   @override
   void initState() {
@@ -634,13 +851,45 @@ class _AiTabState extends State<_AiTab> {
 
   Future<void> _load() async {
     try {
+      // 하루에 한 번만 업데이트 체크
+      final prefs = await SharedPreferences.getInstance();
+      final lastUpdateKey = 'ai_insights_last_update';
+      final lastUpdateDate = prefs.getString(lastUpdateKey);
+      final today = DateTime.now();
+      final todayStr = '${today.year}-${today.month}-${today.day}';
+      
+      // 오늘 이미 업데이트했으면 기존 데이터 로드
+      if (lastUpdateDate == todayStr) {
+        final cachedMessage = prefs.getString('ai_insights_message');
+        final cachedTips = prefs.getStringList('ai_insights_tips');
+        if (mounted) {
+          setState(() {
+            _message = cachedMessage ?? '';
+            _tips = cachedTips ?? const [];
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+      
+      // 오늘 처음이거나 하루가 지났으면 새로 업데이트
       final api = ApiClient();
       final insights = await api.getHealthInsights();
-      setState(() {
-        _message = (insights['message'] ?? '').toString();
-        _tips = List<String>.from(insights['tips'] ?? const []);
-        _isLoading = false;
-      });
+      final message = (insights['message'] ?? '').toString();
+      final tips = List<String>.from(insights['tips'] ?? const []);
+      
+      // 캐시 저장
+      await prefs.setString(lastUpdateKey, todayStr);
+      await prefs.setString('ai_insights_message', message);
+      await prefs.setStringList('ai_insights_tips', tips);
+      
+      if (mounted) {
+        setState(() {
+          _message = message;
+          _tips = tips;
+          _isLoading = false;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -675,135 +924,74 @@ class _AiTabState extends State<_AiTab> {
       ),
     );
 
-    return Stack(
+    return content;
+  }
+
+  Widget _buildAiInsights() {
+    if (_isLoading) {
+      return const SizedBox.shrink();
+    }
+    
+    if (_message.isEmpty && _tips.isEmpty) {
+      return Text(
+        '표시할 인사이트가 없습니다.',
+        style: AppTextStyles.bodyMedium.copyWith(
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        content,
-        if (_isGeneratingReport)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.45),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: AppSizes.md),
-                    Text(
-                      '리포트를 생성 중입니다...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        if (_message.isNotEmpty)
+          _buildInsightItem(
+            title: '요약',
+            content: _message,
+            icon: Icons.analytics,
+            color: AppColors.primary,
+          ),
+        if (_message.isNotEmpty && _tips.isNotEmpty)
+          const SizedBox(height: AppSizes.md),
+        if (_tips.isNotEmpty)
+          _buildInsightItem(
+            title: '권장사항',
+            content: _tips.join('\n'),
+            icon: Icons.tips_and_updates,
+            color: AppColors.success,
           ),
       ],
     );
   }
 
-  Widget _buildAiInsights() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSizes.lg),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.psychology, color: AppColors.primary, size: 24),
-              const SizedBox(width: AppSizes.sm),
-              Text(
-                'AI 건강 인사이트',
-                style: AppTextStyles.h5.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSizes.lg),
-          if (_isLoading)
-            const SizedBox.shrink() // 개별 로딩 인디케이터 제거
-          else if (_message.isEmpty && _tips.isEmpty)
-            Text(
-              '표시할 인사이트가 없습니다.',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            )
-          else ...[
-            if (_message.isNotEmpty)
-              _buildInsightItem(
-                title: '요약',
-                content: _message,
-                icon: Icons.analytics,
-                color: AppColors.primary,
-              ),
-            const SizedBox(height: AppSizes.lg),
-            if (_tips.isNotEmpty)
-              _buildInsightItem(
-                title: '권장사항',
-                content: _tips.join('\n'),
-                icon: Icons.tips_and_updates,
-                color: AppColors.success,
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildReportSection(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSizes.lg),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 24),
-              const SizedBox(width: AppSizes.sm),
-              Text(
-                '의사 상담용 리포트',
-                style: AppTextStyles.h5.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 24),
+            const SizedBox(width: AppSizes.sm),
+            Text(
+              '의사 상담용 리포트',
+              style: AppTextStyles.h5.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
               ),
-            ],
-          ),
-          const SizedBox(height: AppSizes.sm),
-          Text(
-            '최근 복약 내역과 성실도 추세를 정리한 PDF를 다운로드할 수 있습니다.',
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-              height: 1.4,
             ),
+          ],
+        ),
+        const SizedBox(height: AppSizes.sm),
+        Text(
+          '최근 복약 내역과 성실도 추세를 정리한 PDF를 다운로드할 수 있습니다.',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.4,
           ),
-          const SizedBox(height: AppSizes.lg),
-          _buildReportButton(context),
-        ],
-      ),
+        ),
+        const SizedBox(height: AppSizes.lg),
+        _buildReportButton(context),
+      ],
     );
   }
 
@@ -940,20 +1128,37 @@ class _AiTabState extends State<_AiTab> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _showReportGenerated(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              splashFactory: NoSplash.splashFactory,
-            ),
-            child: const Text('생성하기', style: TextStyle(color: Colors.white)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.primary),
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+                  ),
+                  child: const Text('취소'),
+                ),
+              ),
+              const SizedBox(width: AppSizes.sm),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showReportGenerated(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    splashFactory: NoSplash.splashFactory,
+                    padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+                  ),
+                  child: const Text('생성하기'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1067,8 +1272,9 @@ class _AiTabState extends State<_AiTab> {
 // 월별 복용률 선 그래프를 위한 CustomPainter
 class _LineChartPainter extends CustomPainter {
   final List<Map<String, dynamic>> months;
+  final int? selectedIndex; // 선택된 인덱스
 
-  _LineChartPainter(this.months);
+  _LineChartPainter(this.months, {this.selectedIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1100,6 +1306,11 @@ class _LineChartPainter extends CustomPainter {
 
     if (rates.isEmpty) return;
 
+    // 평균값 계산 (모든 값의 평균)
+    final double averageRate = rates.reduce((a, b) => a + b) / rates.length;
+    final normalizedAverage = (averageRate / 100).clamp(0.0, 1.0);
+    final averageY = 20 + chartHeight * (1 - normalizedAverage);
+
     // 선 그래프 그리기
     final linePaint = Paint()
       ..color = AppColors.primary
@@ -1108,10 +1319,6 @@ class _LineChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final path = Path();
-    final pointPaint = Paint()
-      ..color = AppColors.primary
-      ..style = PaintingStyle.fill;
-
     final monthCount = months.length;
     final xDivisor = (monthCount > 1) ? (monthCount - 1) : 1;
 
@@ -1128,9 +1335,55 @@ class _LineChartPainter extends CustomPainter {
         maxIndex = i;
       }
     }
+    
+    // 평균 라인 점선 그리기 (데이터 포인트 그리기 전에)
+    if (averageY.isFinite && averageY >= 20 && averageY <= 20 + chartHeight) {
+      final dashedLinePaint = Paint()
+        ..color = AppColors.textSecondary.withOpacity(0.5)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      
+      // 점선 패턴: 5px 선, 3px 간격
+      const dashWidth = 5.0;
+      const dashSpace = 3.0;
+      const startX = 40.0;
+      final endX = size.width - 20;
+      
+      double currentX = startX;
+      while (currentX < endX) {
+        final lineEndX = (currentX + dashWidth).clamp(currentX, endX);
+        canvas.drawLine(
+          Offset(currentX, averageY),
+          Offset(lineEndX, averageY),
+          dashedLinePaint,
+        );
+        currentX += dashWidth + dashSpace;
+      }
+      
+      // 평균값 레이블 표시 (오른쪽 끝)
+      final averageLabelPainter = TextPainter(
+        text: TextSpan(
+          text: '평균 ${averageRate.round()}%',
+          style: TextStyle(
+            color: AppColors.textSecondary.withOpacity(0.7),
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      averageLabelPainter.layout();
+      final labelX = endX - averageLabelPainter.width - 5;
+      final labelY = averageY - averageLabelPainter.height - 3;
+      if (labelX.isFinite && labelY.isFinite && labelY >= 0) {
+        averageLabelPainter.paint(canvas, Offset(labelX, labelY));
+      }
+    }
 
-    // 표시할 인덱스 집합 (최소값, 최댓값, 중앙값)
-    final Set<int> labelIndices = {minIndex, maxIndex, medianIndex};
+    // 표시할 인덱스 집합 (선택된 인덱스가 있으면 기존 데이터와 함께 표시, 없으면 최소값, 최댓값, 중앙값만)
+    final Set<int> labelIndices = selectedIndex != null
+        ? {selectedIndex!, minIndex, maxIndex, medianIndex}
+        : {minIndex, maxIndex, medianIndex};
 
     for (int i = 0; i < monthCount; i++) {
       final rate = rates[i].toDouble();
@@ -1151,11 +1404,19 @@ class _LineChartPainter extends CustomPainter {
       }
 
       // 데이터 포인트 원 그리기
-      canvas.drawCircle(Offset(x, y), 4, pointPaint);
-      canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
-      canvas.drawCircle(Offset(x, y), 4, pointPaint);
+      final isSelected = selectedIndex == i;
+      final pointRadius = isSelected ? 6.0 : 4.0;
+      final pointPaintSelected = Paint()
+        ..color = AppColors.primary
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawCircle(Offset(x, y), pointRadius, pointPaintSelected);
+      if (!isSelected) {
+        canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
+        canvas.drawCircle(Offset(x, y), 4, pointPaintSelected);
+      }
 
-      // 최소값, 최댓값, 중앙값만 라벨 표시
+      // 선택된 인덱스이거나 최소값, 최댓값, 중앙값인 경우 라벨 표시
       if (labelIndices.contains(i)) {
         final textPainter = TextPainter(
           text: TextSpan(
@@ -1204,14 +1465,31 @@ class _LineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) {
+    // 선택된 인덱스가 변경되었거나 데이터가 변경되었을 때만 다시 그리기
+    if (oldDelegate.selectedIndex != selectedIndex) return true;
+    if (oldDelegate.months.length != months.length) return true;
+    
+    // 데이터 내용이 변경되었는지 확인
+    for (int i = 0; i < months.length && i < oldDelegate.months.length; i++) {
+      final oldPct = oldDelegate.months[i]['pct'] ?? oldDelegate.months[i]['adherence_pct'] ?? 0;
+      final newPct = months[i]['pct'] ?? months[i]['adherence_pct'] ?? 0;
+      if (oldPct != newPct) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
 }
 
 // 일주일 복용률 차트를 위한 CustomPainter
 class _WeeklyChartPainter extends CustomPainter {
   final List<Map<String, dynamic>> weeklyData;
+  final int? selectedIndex; // 선택된 인덱스
+  final int? todayIndex; // 오늘 날짜 인덱스
 
-  _WeeklyChartPainter(this.weeklyData);
+  _WeeklyChartPainter(this.weeklyData, {this.selectedIndex, this.todayIndex});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1244,6 +1522,11 @@ class _WeeklyChartPainter extends CustomPainter {
 
     if (rates.isEmpty) return;
 
+    // 평균값 계산 (모든 값의 평균)
+    final double averageRate = rates.reduce((a, b) => a + b) / rates.length;
+    final normalizedAverage = (averageRate / 100).clamp(0.0, 1.0);
+    final averageY = 20 + chartHeight * (1 - normalizedAverage);
+
     // 선 그래프 그리기
     final linePaint = Paint()
       ..color = AppColors.primary
@@ -1252,17 +1535,12 @@ class _WeeklyChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final path = Path();
-    final pointPaint = Paint()
-      ..color = AppColors.primary
-      ..style = PaintingStyle.fill;
-
     final dayCount = weeklyData.length;
     final xDivisor = (dayCount > 1) ? (dayCount - 1) : 1;
 
-    // 최소값, 최댓값, 중앙값 인덱스 찾기
+    // 최소값, 최댓값 인덱스 찾기
     int minIndex = 0;
     int maxIndex = 0;
-    final int medianIndex = dayCount ~/ 2;
 
     for (int i = 1; i < dayCount; i++) {
       if (rates[i] < rates[minIndex]) {
@@ -1272,9 +1550,60 @@ class _WeeklyChartPainter extends CustomPainter {
         maxIndex = i;
       }
     }
+    
+    // 평균 라인 점선 그리기 (데이터 포인트 그리기 전에)
+    if (averageY.isFinite && averageY >= 20 && averageY <= 20 + chartHeight) {
+      final dashedLinePaint = Paint()
+        ..color = AppColors.textSecondary.withOpacity(0.5)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      
+      // 점선 패턴: 5px 선, 3px 간격
+      const dashWidth = 5.0;
+      const dashSpace = 3.0;
+      const startX = 40.0;
+      final endX = size.width - 20;
+      
+      double currentX = startX;
+      while (currentX < endX) {
+        final lineEndX = (currentX + dashWidth).clamp(currentX, endX);
+        canvas.drawLine(
+          Offset(currentX, averageY),
+          Offset(lineEndX, averageY),
+          dashedLinePaint,
+        );
+        currentX += dashWidth + dashSpace;
+      }
+      
+      // 평균값 레이블 표시 (오른쪽 끝)
+      final averageLabelPainter = TextPainter(
+        text: TextSpan(
+          text: '평균 ${averageRate.round()}%',
+          style: TextStyle(
+            color: AppColors.textSecondary.withOpacity(0.7),
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      averageLabelPainter.layout();
+      final labelX = endX - averageLabelPainter.width - 5;
+      final labelY = averageY - averageLabelPainter.height - 3;
+      if (labelX.isFinite && labelY.isFinite && labelY >= 0) {
+        averageLabelPainter.paint(canvas, Offset(labelX, labelY));
+      }
+    }
 
-    // 표시할 인덱스 집합 (최소값, 최댓값, 중앙값)
-    final Set<int> labelIndices = {minIndex, maxIndex, medianIndex};
+    // 표시할 인덱스 집합: 오늘, 최대, 최소 (최대 3개)
+    final Set<int> labelIndices = <int>{};
+    if (todayIndex != null && todayIndex! >= 0 && todayIndex! < dayCount) {
+      labelIndices.add(todayIndex!);
+    }
+    labelIndices.add(maxIndex);
+    if (minIndex != maxIndex) {
+      labelIndices.add(minIndex);
+    }
 
     for (int i = 0; i < dayCount; i++) {
       final rate = rates[i].toDouble();
@@ -1295,17 +1624,27 @@ class _WeeklyChartPainter extends CustomPainter {
       }
 
       // 데이터 포인트 원 그리기
-      canvas.drawCircle(Offset(x, y), 4, pointPaint);
-      canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
-      canvas.drawCircle(Offset(x, y), 4, pointPaint);
+      final isSelected = selectedIndex == i;
+      final isToday = todayIndex == i;
+      final pointRadius = (isSelected || isToday) ? 6.0 : 4.0;
+      final pointPaintSelected = Paint()
+        ..color = AppColors.primary
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawCircle(Offset(x, y), pointRadius, pointPaintSelected);
+      if (!isSelected && !isToday) {
+        canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
+        canvas.drawCircle(Offset(x, y), 4, pointPaintSelected);
+      }
 
-      // 최소값, 최댓값, 중앙값만 라벨 표시
+      // 오늘, 최대, 최소 인덱스인 경우 라벨 표시
       if (labelIndices.contains(i)) {
+        final isTodayLabel = todayIndex == i;
         final textPainter = TextPainter(
           text: TextSpan(
             text: '$rate%',
             style: TextStyle(
-              color: AppColors.textPrimary,
+              color: isTodayLabel ? AppColors.primary : AppColors.textPrimary,
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
@@ -1348,7 +1687,21 @@ class _WeeklyChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _WeeklyChartPainter oldDelegate) {
+    // 선택된 인덱스나 오늘 인덱스가 변경되었거나 데이터가 변경되었을 때만 다시 그리기
+    if (oldDelegate.selectedIndex != selectedIndex) return true;
+    if (oldDelegate.todayIndex != todayIndex) return true;
+    if (oldDelegate.weeklyData.length != weeklyData.length) return true;
+    
+    // 데이터 내용이 변경되었는지 확인
+    for (int i = 0; i < weeklyData.length && i < oldDelegate.weeklyData.length; i++) {
+      if (weeklyData[i]['pct'] != oldDelegate.weeklyData[i]['pct']) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
 }
 
 // 평일/주말 차트를 위한 CustomPainter (사용하지 않음, 나중에 필요시 활용)

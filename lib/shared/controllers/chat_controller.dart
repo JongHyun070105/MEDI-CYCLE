@@ -37,7 +37,7 @@ class ChatController extends StateNotifier<ChatState> {
 
   Future<void> loadHistory() async {
     try {
-      state = state.copyWith(isLoading: true);
+      // 로딩 상태를 표시하지 않음 (백그라운드에서 조용히 로드)
       final data = await _api.getChatHistory();
       final list = List<Map<String, dynamic>>.from(data['messages'] ?? []);
       final messages = list.map((m) {

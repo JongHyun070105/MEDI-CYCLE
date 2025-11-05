@@ -4,7 +4,7 @@ import 'navigation_service.dart';
 
 const String baseUrl = String.fromEnvironment(
   'BACKEND_URL',
-  defaultValue: 'https://redeem-agent-polymer-preliminary.trycloudflare.com',
+  defaultValue: 'https://complexity-into-trackback-hired.trycloudflare.com',
 );
 
 class ApiClient {
@@ -225,6 +225,7 @@ class ApiClient {
 
   // 프로필 업데이트
   Future<Map<String, dynamic>> updateProfile({
+    String? email,
     String? name,
     int? age,
     String? address,
@@ -235,6 +236,7 @@ class ApiClient {
       final response = await dio.put(
         '/api/auth/profile',
         data: {
+          if (email != null) 'email': email,
           if (name != null) 'name': name,
           if (age != null) 'age': age,
           if (address != null) 'address': address,
@@ -469,6 +471,21 @@ class ApiClient {
   Future<Map<String, dynamic>> getHealthInsights() async {
     try {
       final response = await dio.get('/api/medications/stats/insights');
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // 개인화된 알림 스케줄 조회
+  Future<Map<String, dynamic>> getPersonalizedSchedule({
+    required String medicationType,
+  }) async {
+    try {
+      final response = await dio.get(
+        '/api/medications/personalized-schedule',
+        queryParameters: {'medication_type': medicationType},
+      );
       return response.data;
     } catch (e) {
       rethrow;

@@ -32,8 +32,11 @@ class PillboxStatsState extends State<PillboxStats> {
 
   Future<void> _loadStatus() async {
     try {
-      final isConnected = await _rpiService.isConnected();
-      final status = await _rpiService.getStatus();
+      // 타임아웃을 3초로 설정
+      final isConnected = await _rpiService.isConnected()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      final status = await _rpiService.getStatus()
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
 
       if (!mounted) return;
       setState(() {
@@ -46,6 +49,7 @@ class PillboxStatsState extends State<PillboxStats> {
       if (!mounted) return;
       setState(() {
         _isConnected = false;
+        _hasMedication = false;
         _isLoading = false;
       });
     }
@@ -58,28 +62,40 @@ class PillboxStatsState extends State<PillboxStats> {
         // 연결 상태 카드
         Expanded(
           child: _buildStatusCard(
-            icon: _isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-            iconColor: _isConnected ? AppColors.primary : AppColors.error,
-            backgroundColor: _isConnected
-                ? AppColors.primary.withOpacity(0.1)
-                : AppColors.error.withOpacity(0.1),
+            icon: _isLoading 
+                ? Icons.bluetooth_searching 
+                : (_isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled),
+            iconColor: _isLoading 
+                ? AppColors.textSecondary 
+                : (_isConnected ? AppColors.success : AppColors.error),
+            backgroundColor: _isLoading 
+                ? AppColors.textSecondary.withOpacity(0.1)
+                : (_isConnected 
+                    ? AppColors.success.withOpacity(0.1)
+                    : AppColors.error.withOpacity(0.1)),
             title: '연결 상태',
             status: _isLoading
                 ? '확인 중...'
                 : (_isConnected ? '연결됨' : '연결 끊김'),
             statusColor:
-                _isLoading ? AppColors.textSecondary : (_isConnected ? AppColors.primary : AppColors.error),
+                _isLoading ? AppColors.textSecondary : (_isConnected ? AppColors.success : AppColors.error),
           ),
         ),
         const SizedBox(width: AppSizes.sm),
         // 약물 감지 카드
         Expanded(
           child: _buildStatusCard(
-            icon: _hasMedication ? Icons.check_circle : Icons.cancel,
-            iconColor: _hasMedication ? AppColors.success : AppColors.error,
-            backgroundColor: _hasMedication
-                ? AppColors.success.withOpacity(0.1)
-                : AppColors.error.withOpacity(0.1),
+            icon: _isLoading 
+                ? Icons.search 
+                : (_hasMedication ? Icons.check_circle : Icons.cancel),
+            iconColor: _isLoading 
+                ? AppColors.textSecondary 
+                : (_hasMedication ? AppColors.success : AppColors.error),
+            backgroundColor: _isLoading 
+                ? AppColors.textSecondary.withOpacity(0.1)
+                : (_hasMedication
+                    ? AppColors.success.withOpacity(0.1)
+                    : AppColors.error.withOpacity(0.1)),
             title: '약물 감지',
             status: _isLoading
                 ? '확인 중...'

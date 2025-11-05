@@ -67,11 +67,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          SafeArea(
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSizes.lg),
@@ -253,35 +253,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
           ),
-
-          // 로그인 중 전체 화면 오버레이
-          if (authState.isLoading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.5),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      SizedBox(height: AppSizes.md),
-                      Text(
-                        '로그인하는 중입니다...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

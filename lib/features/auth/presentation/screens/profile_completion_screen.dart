@@ -103,21 +103,21 @@ class _ProfileCompletionScreenState
   Widget build(BuildContext context) {
     final profileState = ref.watch(profileCompletionControllerProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('프로필 완성'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: Stack(
-        children: [
-          SafeArea(
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: const Text('프로필 완성'),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            surfaceTintColor: Colors.white,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSizes.lg),
               child: Form(
@@ -382,35 +382,8 @@ class _ProfileCompletionScreenState
               ),
             ),
           ),
-
-          // 프로필 완성 중 전체 화면 오버레이
-          if (profileState.isLoading)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.5),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                      SizedBox(height: AppSizes.md),
-                      Text(
-                        '프로필을 완성하는 중입니다...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

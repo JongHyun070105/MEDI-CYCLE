@@ -113,32 +113,6 @@ class _MedicationRegistrationScreenState
       ),
         ),
 
-        // 등록 중 전체 화면 오버레이 (Scaffold 전체를 덮음)
-        if (_isSubmitting)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: AppSizes.md),
-                    Text(
-                      '약을 등록하는 중입니다...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }

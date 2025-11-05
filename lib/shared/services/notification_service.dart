@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../models/medication_model.dart';
 import '../../features/medication/presentation/widgets/medication_feedback_dialog.dart';
 import 'navigation_service.dart';
+import 'api_client.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -256,6 +257,44 @@ class NotificationService {
       // (아래에서 처리)
     }
 
+    // ML 서버에서 개인화된 스케줄 조회 시도
+    Map<String, dynamic>? personalizedTimes;
+    int? learningStage;
+    try {
+      final api = ApiClient();
+      final scheduleResponse = await api.getPersonalizedSchedule(
+        medicationType: medication.name,
+      );
+      final schedule = scheduleResponse['schedule'];
+      if (schedule != null && schedule is Map<String, dynamic>) {
+        final prediction = schedule['predicted_times'];
+        learningStage = schedule['learning_stage'] as int?;
+        if (prediction != null && prediction is Map<String, dynamic>) {
+          personalizedTimes = prediction;
+          debugPrint(
+            '🤖 ML 서버 개인화 스케줄 조회 성공: ${medication.name}, 학습 단계: $learningStage',
+          );
+        }
+      } else if (scheduleResponse['prediction'] != null) {
+        // prediction이 직접 있는 경우
+        final prediction =
+            scheduleResponse['prediction'] as Map<String, dynamic>?;
+        if (prediction != null) {
+          learningStage = prediction['learning_stage'] as int?;
+          final predictedTimes = prediction['predicted_times'];
+          if (predictedTimes != null &&
+              predictedTimes is Map<String, dynamic>) {
+            personalizedTimes = predictedTimes;
+            debugPrint(
+              '🤖 ML 서버 개인화 스케줄 조회 성공 (직접): ${medication.name}, 학습 단계: $learningStage',
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ ML 서버 개인화 스케줄 조회 실패: $e');
+    }
+
     // 복용 시간 목록 가져오기
     final List<Map<String, dynamic>> dosageTimes = [];
     final List<Time?> times = [
@@ -283,10 +322,52 @@ class NotificationService {
       medication.time6OffsetMin,
     ];
 
+    // 학습 단계 2단계 이상이고 개인화된 시간이 있으면 사용
+    bool usePersonalizedTime =
+        learningStage != null &&
+        learningStage >= 2 &&
+        personalizedTimes != null;
+
     for (int i = 0; i < times.length; i++) {
       if (times[i] != null) {
+        Time? timeToUse = times[i];
+
+        // 개인화된 시간 사용 (아침/저녁 시간 기준으로 매핑)
+        if (usePersonalizedTime) {
+          if (i == 0 && personalizedTimes.containsKey('breakfast')) {
+            // 첫 번째 시간을 아침 시간으로 매핑
+            final breakfastTime = personalizedTimes['breakfast'] as String?;
+            if (breakfastTime != null) {
+              final parts = breakfastTime.split(':');
+              if (parts.length == 2) {
+                final hour = int.tryParse(parts[0]);
+                final minute = int.tryParse(parts[1]);
+                if (hour != null && minute != null) {
+                  timeToUse = Time(hour: hour, minute: minute);
+                  debugPrint('🤖 개인화된 아침 시간 사용: $breakfastTime');
+                }
+              }
+            }
+          } else if (i == times.length - 1 &&
+              personalizedTimes.containsKey('dinner')) {
+            // 마지막 시간을 저녁 시간으로 매핑
+            final dinnerTime = personalizedTimes['dinner'] as String?;
+            if (dinnerTime != null) {
+              final parts = dinnerTime.split(':');
+              if (parts.length == 2) {
+                final hour = int.tryParse(parts[0]);
+                final minute = int.tryParse(parts[1]);
+                if (hour != null && minute != null) {
+                  timeToUse = Time(hour: hour, minute: minute);
+                  debugPrint('🤖 개인화된 저녁 시간 사용: $dinnerTime');
+                }
+              }
+            }
+          }
+        }
+
         dosageTimes.add({
-          'time': times[i]!,
+          'time': timeToUse!,
           'meal': mealRelations[i] ?? '',
           'offset': mealOffsets[i] ?? 0,
         });

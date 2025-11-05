@@ -36,6 +36,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
     }
   }
 
+  bool _hasLoadedOnce = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,14 +46,26 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
 
   /// 외부에서 새로고침 호출 가능
   void refresh() {
+    // 로딩 중이어도 강제로 새로고침 시작 (버튼이 비활성화된 상태 해결)
     _loadStatus();
   }
+  
+  
+  /// 외부에서 로딩 완료 여부 확인 (메인화면에서 사용)
+  bool get hasLoadedOnce => _hasLoadedOnce;
+  
+  /// 외부에서 로딩 상태 확인 (오버레이 표시용)
+  bool get isLoading => _isLoading;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    if (_isLoading && !_hasLoadedOnce) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSizes.md,
         AppSizes.md,
@@ -77,34 +91,6 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           _buildRecentActivity(),
         ],
       ),
-    ),
-        // 로딩 중 전체 화면 오버레이
-        if (_isLoading)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: AppSizes.md),
-                    Text(
-                      '약상자 상태를 불러오는 중입니다...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 
@@ -152,15 +138,6 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
               color: AppColors.textSecondary,
             ),
           ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: AppSizes.sm),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
         ],
       ),
     );
@@ -189,7 +166,7 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           title: '잠금 상태',
           value: _isLocked ? '잠김' : '열림',
           icon: _isLocked ? Icons.lock : Icons.lock_open,
-          color: _isLocked ? AppColors.error : AppColors.success,
+          color: _isLocked ? AppColors.success : AppColors.error,
         ),
       ],
     );
@@ -278,19 +255,60 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           ),
         ),
         const SizedBox(height: AppSizes.lg),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _isLoading ? null : _refreshStatus,
-            icon: const Icon(Icons.refresh),
-            label: const Text('상태 새로고침'),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.primary),
-              foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
-              splashFactory: NoSplash.splashFactory,
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        // 더미: 잠금/잠금 해제 기능
+                        setState(() {
+                          _isLocked = !_isLocked;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(_isLocked
+                                ? '약상자가 잠겼습니다'
+                                : '약상자 잠금이 해제되었습니다'),
+                            backgroundColor: _isLocked
+                                ? AppColors.success
+                                : AppColors.error,
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                icon: Icon(_isLocked ? Icons.lock : Icons.lock_open),
+                label: Text(_isLocked ? '잠금 해제' : '잠금'),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: _isLocked
+                        ? AppColors.success
+                        : AppColors.error,
+                  ),
+                  foregroundColor: _isLocked
+                      ? AppColors.success
+                      : AppColors.error,
+                  padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+                  splashFactory: NoSplash.splashFactory,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: AppSizes.sm),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _refreshStatus,
+                icon: const Icon(Icons.refresh),
+                label: const Text('상태 새로고침'),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary),
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+                  splashFactory: NoSplash.splashFactory,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -310,12 +328,6 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (_isLoading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
           ],
         ),
         const SizedBox(height: AppSizes.lg),
@@ -406,9 +418,13 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
     });
 
     try {
-      final isConnected = await _rpiService.isConnected();
-      final status = await _rpiService.getStatus();
-      final logs = await _rpiService.getLogs(limit: 20);
+      // 타임아웃을 포함한 상태 조회 (최대 3초)
+      final isConnected = await _rpiService.isConnected()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      final status = await _rpiService.getStatus()
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      final logs = await _rpiService.getLogs(limit: 20)
+          .timeout(const Duration(seconds: 3), onTimeout: () => <RpiPillboxLog>[]);
 
       if (!mounted) return;
       // 로그를 최신순으로 정렬 (시간 역순)
@@ -427,13 +443,17 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         _lastSeenDateTime = status?.lastSeenDateTime;
         _recentLogs = logs;
         _isLoading = false;
+        _hasLoadedOnce = true;
       });
     } catch (e) {
       debugPrint('약상자 상태 로드 실패: $e');
       if (!mounted) return;
       setState(() {
         _isConnected = false;
+        _hasMedication = false;
+        _recentLogs = [];
         _isLoading = false;
+        _hasLoadedOnce = true;
       });
     }
   }
@@ -445,10 +465,13 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
     });
 
     try {
-      // 상태와 로그를 함께 새로고침
-      final isConnected = await _rpiService.isConnected();
-      final status = await _rpiService.getStatus();
-      final logs = await _rpiService.getLogs(limit: 20);
+      // 상태와 로그를 함께 새로고침 (타임아웃 추가)
+      final isConnected = await _rpiService.isConnected()
+          .timeout(const Duration(seconds: 3), onTimeout: () => false);
+      final status = await _rpiService.getStatus()
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      final logs = await _rpiService.getLogs(limit: 20)
+          .timeout(const Duration(seconds: 3), onTimeout: () => <RpiPillboxLog>[]);
 
       if (!mounted) return;
       // 로그를 최신순으로 정렬 (시간 역순)

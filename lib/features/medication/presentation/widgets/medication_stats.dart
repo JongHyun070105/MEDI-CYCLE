@@ -47,14 +47,14 @@ class MedicationStatsState extends State<MedicationStats> {
             ? DateTime.tryParse(endStr)
             : null;
         if (start == null) return false;
-        final bool afterStart = !today.isBefore(
-          DateTime(start.year, start.month, start.day),
-        );
+        // 시작일 체크: 오늘이 시작일 이후거나 같으면 true
+        final DateTime startDate = DateTime(start.year, start.month, start.day);
+        final bool afterStart = !today.isBefore(startDate);
+        
+        // 종료일 체크: 무기한이거나 종료일이 없으면 true, 종료일이 있으면 오늘이 종료일 이하이면 true
         final bool beforeEnd = isIndefinite || end == null
             ? true
-            : !today.isAfter(
-                DateTime(end.year, end.month, end.day, 23, 59, 59),
-              );
+            : !today.isAfter(DateTime(end.year, end.month, end.day));
         return afterStart && beforeEnd;
       }
 

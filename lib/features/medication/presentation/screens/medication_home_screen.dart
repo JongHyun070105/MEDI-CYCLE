@@ -32,8 +32,6 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isHomeTabRefreshing = _homeTabKey.currentState?.isRefreshing ?? false;
-    
     return Stack(
       children: [
         Scaffold(
@@ -67,13 +65,19 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
         index: _currentIndex,
         children: [
           const _DisposalTab(),
-          _MedicationTab(
+            _MedicationTab(
             key: _medicationTabKey,
             onMedicationDeleted: () {
-              _homeTabKey.currentState?.refreshAll();
+              final homeTabState = _homeTabKey.currentState;
+              if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                homeTabState.refreshAll();
+              }
             },
             onMedicationUpdated: () {
-              _homeTabKey.currentState?.refreshAll();
+              final homeTabState = _homeTabKey.currentState;
+              if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                homeTabState.refreshAll();
+              }
             },
           ),
           _HomeTab(key: _homeTabKey),
@@ -95,15 +99,29 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
             });
                 // 홈 탭으로 이동할 때마다 새로고침 (다른 탭에서만, 챗봇 제외)
                 // 챗봇은 FAB으로 이동하므로 여기서는 처리하지 않음
+                // 초기 로딩이 완료된 후에만 새로고침 수행
                 if (index == 2 && previousIndex != 2) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _homeTabKey.currentState?.refreshAll();
+                    final homeTabState = _homeTabKey.currentState;
+                    if (homeTabState != null) {
+                      // 초기 로딩이 완료된 경우에만 새로고침
+                      if (homeTabState._hasCompletedInitialLoad && !homeTabState.isRefreshing) {
+                        homeTabState.refreshAll();
+                      }
+                      // 연결 상태와 약물 감지도 새로고침 (약상자 상태)
+                      homeTabState.refreshPillboxStats();
+                    }
                   });
                 }
                 // 약 상자 탭으로 이동할 때마다 새로고침
                 if (index == 3 && previousIndex != 3) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _medicationBoxScreenKey.currentState?.refresh();
+                    final boxScreen = _medicationBoxScreenKey.currentState;
+                    if (boxScreen != null) {
+                      // 로딩 상태를 초기화하고 다시 로드
+                      // 이미 로드된 경우라도 다시 로드하여 버튼이 활성화되도록 함
+                      boxScreen.refresh();
+                    }
                   });
                 }
           },
@@ -154,14 +172,20 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
                   onMedicationAdded: (medication) {
                     // 약이 추가될 때마다 리스트에 추가
                     _medicationTabKey.currentState?.addMedication(medication);
-                    _homeTabKey.currentState?.refreshAll();
+                    final homeTabState = _homeTabKey.currentState;
+                    if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                      homeTabState.refreshAll();
+                    }
                   },
                 ),
               ),
             );
             if (result != null && result is Map<String, dynamic>) {
               _medicationTabKey.currentState?.addMedication(result);
-              _homeTabKey.currentState?.refreshAll();
+              final homeTabState = _homeTabKey.currentState;
+              if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                homeTabState.refreshAll();
+              }
             }
                 // 약 등록 후 홈 탭으로 자동 이동 및 새로고침
                 if (result != null) {
@@ -169,7 +193,10 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
                     _currentIndex = 2; // 홈 탭으로 이동
                   });
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _homeTabKey.currentState?.refreshAll();
+                    final homeTabState = _homeTabKey.currentState;
+                    if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                      homeTabState.refreshAll();
+                    }
                   });
                 }
           } else {
@@ -189,33 +216,6 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         ),
-
-        // 홈 탭 새로고침 중 전체 화면 오버레이 (Scaffold 전체를 덮음)
-        if (isHomeTabRefreshing && _currentIndex == 2)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: AppSizes.md),
-                    Text(
-                      '데이터를 불러오는 중입니다...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -237,9 +237,11 @@ class _HomeTabState extends State<_HomeTab> {
       GlobalKey<PillboxStatsState>();
   bool _isInitialLoading = true;
   bool _isRefreshing = false;
+  bool _hasCompletedInitialLoad = false;
   
   // 외부에서 새로고침 상태 확인용 getter
   bool get isRefreshing => _isRefreshing;
+  bool get isInitialLoading => _isInitialLoading;
 
   @override
   void initState() {
@@ -250,19 +252,28 @@ class _HomeTabState extends State<_HomeTab> {
   Future<void> _loadInitialData() async {
     // 약간의 지연을 주어 모든 컴포넌트가 로딩을 시작하도록 함
     await Future.delayed(const Duration(milliseconds: 100));
-    // 모든 컴포넌트가 로딩 완료될 때까지 대기
+    
+    // 통계, 체크리스트, 약상자 상태를 동시에 로딩
     await Future.wait([
-      Future.delayed(const Duration(milliseconds: 500)), // 충분한 시간 대기
+      refreshStats(),
+      refreshChecklist(),
+      refreshPillboxStats(),
     ]);
+    
     if (mounted) {
       setState(() {
         _isInitialLoading = false;
+        _hasCompletedInitialLoad = true;
       });
     }
   }
 
   Future<void> refreshAll() async {
-    if (_isRefreshing) return; // 이미 새로고침 중이면 무시
+    // 초기 로딩이 완료되지 않았으면 무시
+    if (!_hasCompletedInitialLoad) return;
+    
+    // 이미 새로고침 중이면 무시
+    if (_isRefreshing) return;
     
     setState(() {
       _isRefreshing = true;
@@ -275,6 +286,8 @@ class _HomeTabState extends State<_HomeTab> {
         refreshChecklist(),
         refreshPillboxStats(),
       ]);
+    } catch (e) {
+      debugPrint('새로고침 중 오류: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -298,14 +311,7 @@ class _HomeTabState extends State<_HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        if (_isInitialLoading)
-          Container(
-            color: Colors.white,
-          )
-        else
-          SingleChildScrollView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSizes.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,34 +362,6 @@ class _HomeTabState extends State<_HomeTab> {
           const SizedBox(height: 150),
         ],
       ),
-    ),
-        // 초기 로딩 중 전체 화면 오버레이
-        if (_isInitialLoading)
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                    SizedBox(height: AppSizes.md),
-                    Text(
-                      '데이터를 불러오는 중입니다...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -991,60 +969,80 @@ class _DisposalTab extends StatelessWidget {
   }
 }
 
-class _PharmacyTab extends StatelessWidget {
+class _PharmacyTab extends StatefulWidget {
   final GlobalKey<MedicationBoxScreenState>? medicationBoxScreenKey;
   
   const _PharmacyTab({this.medicationBoxScreenKey});
 
   @override
+  State<_PharmacyTab> createState() => _PharmacyTabState();
+}
+
+class _PharmacyTabState extends State<_PharmacyTab> {
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('약 상자 상태'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: MedicationBoxScreen(key: medicationBoxScreenKey),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            title: const Text('약 상자 상태'),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+          ),
+          body: MedicationBoxScreen(key: widget.medicationBoxScreenKey),
+        ),
+      ],
     );
   }
 }
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends StatefulWidget {
   const _ProfileTab();
 
   @override
+  State<_ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<_ProfileTab> {
+  final GlobalKey<AiFeedbackScreenState> _aiFeedbackScreenKey = GlobalKey<AiFeedbackScreenState>();
+  
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: const Text('인사이트'),
-          backgroundColor: Colors.white,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          surfaceTintColor: Colors.transparent,
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(48),
-            child: TabBar(
-              indicatorColor: AppColors.primary,
-              labelColor: AppColors.primary,
-              unselectedLabelColor: AppColors.textSecondary,
-              labelStyle: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.w600,
+    return Stack(
+      children: [
+        DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: const Text('인사이트'),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: TabBar(
+                  indicatorColor: AppColors.primary,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.textSecondary,
+                  labelStyle: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: const [
+                    Tab(text: '대시보드'),
+                    Tab(text: 'AI'),
+                  ],
+                ),
               ),
-              tabs: const [
-                Tab(text: '대시보드'),
-                Tab(text: 'AI'),
-              ],
             ),
+            body: AiFeedbackScreen(key: _aiFeedbackScreenKey),
           ),
         ),
-        body: const AiFeedbackScreen(),
-      ),
+      ],
     );
   }
 }
@@ -1358,8 +1356,33 @@ class _TodayIntakeChecklistState extends State<_TodayIntakeChecklist> {
       final List<Map<String, dynamic>> intakes =
           List<Map<String, dynamic>>.from(intakesResp['intakes'] ?? []);
 
+      // 오늘 날짜 기준 활성 약만 필터링
+      final DateTime today = DateTime.now();
+      final List<Map<String, dynamic>> activeMeds = meds.where((m) {
+        final String? startStr = (m['start_date'] ?? m['startDate'])?.toString();
+        final String? endStr = (m['end_date'] ?? m['endDate'])?.toString();
+        final bool isIndefinite = (m['is_indefinite'] ?? m['isIndefinite']) == true;
+        if (startStr == null || startStr.isEmpty) return false;
+        final DateTime? start = DateTime.tryParse(startStr);
+        final DateTime? end = endStr != null && endStr.isNotEmpty
+            ? DateTime.tryParse(endStr)
+            : null;
+        if (start == null) return false;
+        
+        // 시작일 체크: 오늘이 시작일 이후거나 같으면 true
+        final DateTime startDate = DateTime(start.year, start.month, start.day);
+        final bool afterStart = !today.isBefore(startDate);
+        
+        // 종료일 체크: 무기한이거나 종료일이 없으면 true, 종료일이 있으면 오늘이 종료일 이하이면 true
+        final bool beforeEnd = isIndefinite || end == null
+            ? true
+            : !today.isAfter(DateTime(end.year, end.month, end.day));
+        
+        return afterStart && beforeEnd;
+      }).toList();
+
       List<_PlannedIntake> planned = [];
-      for (final m in meds) {
+      for (final m in activeMeds) {
         final int id = (m['id'] as int);
         final String name = (m['drug_name'] ?? m['name'] ?? '').toString();
         final List times = (m['dosage_times'] as List?) ?? const [];

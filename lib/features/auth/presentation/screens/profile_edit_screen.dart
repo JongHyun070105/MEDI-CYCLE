@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../controllers/profile_completion_controller.dart';
+import '../controllers/auth_controller.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/address_input_field.dart';
@@ -28,6 +29,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   String? _selectedGender;
   AddressResult? _selectedAddress;
   DateTime? _selectedBirthDate;
+  bool _isLoading = false;
 
   final List<String> _genders = ['남성', '여성'];
 
@@ -112,42 +114,86 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         return;
       }
 
-      final profileController = ref.read(
-        profileCompletionControllerProvider.notifier,
-      );
+      setState(() {
+        _isLoading = true;
+      });
 
-      await profileController.completeProfile(
-        birthDate: _selectedBirthDate!,
-        gender: _selectedGender!,
-        address: _selectedAddress?.roadAddr ?? _addressController.text.trim(),
-        detailAddress: _detailAddressController.text.trim(),
-      );
+      try {
+        final now = DateTime.now();
+        final age = now.year - _selectedBirthDate!.year;
+        final fullAddress = _detailAddressController.text.trim().isNotEmpty
+            ? '${_selectedAddress?.roadAddr ?? _addressController.text.trim()} ${_detailAddressController.text.trim()}'
+            : (_selectedAddress?.roadAddr ?? _addressController.text.trim());
 
-      final profileState = ref.read(profileCompletionControllerProvider);
-
-      if (profileState.isCompleted && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('프로필이 수정되었습니다.'),
-            backgroundColor: AppColors.primary,
-          ),
+        final apiClient = ApiClient();
+        final currentEmail = ref.read(authControllerProvider).user?.email ?? '';
+        final newEmail = _emailController.text.trim();
+        
+        final response = await apiClient.updateProfile(
+          email: newEmail != currentEmail ? newEmail : null,
+          name: _nameController.text.trim(),
+          age: age,
+          gender: _selectedGender!,
+          address: fullAddress,
         );
-        Navigator.of(context).pop();
-      } else if (profileState.hasError && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(profileState.errorMessage ?? '프로필 수정 중 오류가 발생했습니다.'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+
+        if (response['user'] != null && mounted) {
+          final authController = ref.read(authControllerProvider.notifier);
+          await authController.loadUserProfile(
+            expectedUserId: ref.read(authControllerProvider).user?.id,
+            expectedEmail: ref.read(authControllerProvider).user?.email,
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('프로필이 수정되었습니다.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          String errorMessage = '프로필 수정 중 오류가 발생했습니다.';
+          
+          // DioException 에러 처리
+          if (e is DioException) {
+            if (e.response != null) {
+              final responseData = e.response?.data;
+              if (responseData is Map<String, dynamic>) {
+                final error = responseData['error'] as String?;
+                if (error != null) {
+                  errorMessage = error;
+                }
+              }
+            } else if (e.type == DioExceptionType.connectionTimeout ||
+                e.type == DioExceptionType.receiveTimeout) {
+              errorMessage = '서버 연결 시간이 초과되었습니다. 다시 시도해주세요.';
+            } else if (e.type == DioExceptionType.connectionError) {
+              errorMessage = '서버에 연결할 수 없습니다. 네트워크를 확인해주세요.';
+            }
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final profileState = ref.watch(profileCompletionControllerProvider);
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -431,8 +477,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                 // 저장 버튼
                 CustomButton(
                   text: '프로필 저장',
-                  onPressed: profileState.isLoading ? null : _handleSaveProfile,
-                  isLoading: profileState.isLoading,
+                  onPressed: _isLoading ? null : _handleSaveProfile,
+                  isLoading: _isLoading,
                 ),
               ],
             ),

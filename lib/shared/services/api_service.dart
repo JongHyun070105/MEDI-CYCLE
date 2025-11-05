@@ -6,7 +6,7 @@ import 'api_client.dart';
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'https://redeem-agent-polymer-preliminary.trycloudflare.com',
+    defaultValue: 'https://complexity-into-trackback-hired.trycloudflare.com',
   );
   late final Dio _dio;
   String? _token;

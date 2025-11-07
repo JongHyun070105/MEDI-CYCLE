@@ -23,6 +23,8 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
   bool _hasConsent = false;
   bool _isCheckingConsent = true;
   final GlobalKey<_AiTabState> _aiTabKey = GlobalKey<_AiTabState>();
+  final GlobalKey<_DashboardTabState> _dashboardTabKey = GlobalKey<_DashboardTabState>();
+  TabController? _tabController;
   
   // 외부에서 _aiTabKey 접근 가능하도록 getter 추가
   GlobalKey<_AiTabState> get aiTabKey => _aiTabKey;
@@ -31,6 +33,38 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
   void initState() {
     super.initState();
     _checkConsent();
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_tabController == null) {
+      _tabController = DefaultTabController.of(context);
+      _tabController?.addListener(_onTabChanged);
+    }
+  }
+  
+  @override
+  void dispose() {
+    _tabController?.removeListener(_onTabChanged);
+    super.dispose();
+  }
+  
+  void _onTabChanged() {
+    if (_tabController != null && !_tabController!.indexIsChanging) {
+      // 탭 전환이 완료된 후에 새로고침
+      if (_tabController!.index == 0) {
+        // 대시보드 탭
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _dashboardTabKey.currentState?.refresh();
+        });
+      } else if (_tabController!.index == 1) {
+        // AI 탭
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _aiTabKey.currentState?.refresh();
+        });
+      }
+    }
   }
 
   Future<void> _checkConsent() async {
@@ -149,12 +183,17 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
       );
     }
 
-    return TabBarView(children: [const _DashboardTab(), _AiTab(key: _aiTabKey)]);
+    return TabBarView(
+      children: [
+        _DashboardTab(key: _dashboardTabKey),
+        _AiTab(key: _aiTabKey),
+      ],
+    );
   }
 }
 
 class _DashboardTab extends StatefulWidget {
-  const _DashboardTab();
+  const _DashboardTab({super.key});
 
   @override
   State<_DashboardTab> createState() => _DashboardTabState();
@@ -174,6 +213,14 @@ class _DashboardTabState extends State<_DashboardTab> {
   void initState() {
     super.initState();
     _load();
+  }
+  
+  /// 외부에서 새로고침 호출 가능
+  Future<void> refresh() async {
+    setState(() {
+      _isLoading = true;
+    });
+    await _load();
   }
 
   Future<void> _load() async {
@@ -223,8 +270,8 @@ class _DashboardTabState extends State<_DashboardTab> {
         // 디버깅: 파싱된 값 확인
         debugPrint('📅 월별 데이터 파싱: month=$raw, mmStr=$mmStr, mm=$mm, pctValue=$pctValue, pct=$pct');
         
-        months[mm - 1] = {'month': mmStr.padLeft(2, '0'), 'pct': pct};
-      }
+          months[mm - 1] = {'month': mmStr.padLeft(2, '0'), 'pct': pct};
+        }
       
       // 디버깅: 최종 months 배열 확인
       debugPrint('📊 최종 months 배열: ${months.map((m) => '${m['month']}: ${m['pct']}%').join(', ')}');
@@ -339,10 +386,10 @@ class _DashboardTabState extends State<_DashboardTab> {
           // 실제 데이터가 있는 경우만 집계
           final String monthStr = months[monthIndex]['month'] as String;
           if (monthStr == targetMonth.toString().padLeft(2, '0')) {
-            recent3MonthsSum += pct;
-            recent3MonthsCount++;
-          }
+          recent3MonthsSum += pct;
+          recent3MonthsCount++;
         }
+      }
       }
       
       final int recent3MonthsAvg = recent3MonthsCount > 0
@@ -351,7 +398,7 @@ class _DashboardTabState extends State<_DashboardTab> {
 
       // 오늘 날짜의 인덱스 계산 (월요일 기준 0부터 시작)
       final int todayIndex = today.weekday - 1; // 0=월요일, 6=일요일
-      
+
       setState(() {
         _months = months;
         _weeklyData = weekly;
@@ -382,7 +429,7 @@ class _DashboardTabState extends State<_DashboardTab> {
         AppSizes.md,
         AppSizes.md,
         AppSizes.md,
-        150, // FAB 버튼을 위한 하단 패딩 추가
+        50, // FAB 버튼을 위한 하단 패딩 감소
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +439,7 @@ class _DashboardTabState extends State<_DashboardTab> {
           _buildWeeklyChart(),
           const SizedBox(height: AppSizes.md),
           _buildMonthlyChart(),
-          const SizedBox(height: 100), // FAB 버튼을 위한 하단 여백 추가
+          const SizedBox(height: 20), // FAB 버튼을 위한 하단 여백 감소
         ],
       ),
     );
@@ -463,14 +510,19 @@ class _DashboardTabState extends State<_DashboardTab> {
         children: [
           Row(
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                ),
-                child: Icon(icon, color: iconColor, size: 18),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double iconSize = (MediaQuery.of(context).size.width * 0.08).clamp(28.0, 36.0);
+                  return Container(
+                    width: iconSize,
+                    height: iconSize,
+                    decoration: BoxDecoration(
+                      color: iconColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                    ),
+                    child: Icon(icon, color: iconColor, size: iconSize * 0.55),
+                  );
+                },
               ),
               const Spacer(),
             ],
@@ -621,12 +673,12 @@ class _DashboardTabState extends State<_DashboardTab> {
                             });
                           }
                         },
-                        child: CustomPaint(
+                  child: CustomPaint(
                           painter: _LineChartPainter(
                             _months,
                             selectedIndex: _selectedMonthIndex,
                           ),
-                          size: Size.infinite,
+                    size: Size.infinite,
                         ),
                       );
                     },
@@ -669,7 +721,6 @@ class _DashboardTabState extends State<_DashboardTab> {
     }
     return month;
   }
-
 
   Widget _buildWeeklyChart() {
     return Container(
@@ -782,13 +833,13 @@ class _DashboardTabState extends State<_DashboardTab> {
                             });
                           }
                         },
-                        child: CustomPaint(
+                  child: CustomPaint(
                           painter: _WeeklyChartPainter(
                             _weeklyData,
                             selectedIndex: _selectedWeekdayIndex,
                             todayIndex: DateTime.now().weekday - 1, // 오늘 날짜 인덱스
                           ),
-                          size: Size.infinite,
+                    size: Size.infinite,
                         ),
                       );
                     },
@@ -848,6 +899,20 @@ class _AiTabState extends State<_AiTab> {
     super.initState();
     _load();
   }
+  
+  /// 외부에서 새로고침 호출 가능
+  Future<void> refresh() async {
+    // 캐시 무시하고 강제 새로고침
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('ai_insights_last_update');
+    await prefs.remove('ai_insights_message');
+    await prefs.remove('ai_insights_tips');
+    
+    setState(() {
+      _isLoading = true;
+    });
+    await _load();
+  }
 
   Future<void> _load() async {
     try {
@@ -884,11 +949,11 @@ class _AiTabState extends State<_AiTab> {
       await prefs.setStringList('ai_insights_tips', tips);
       
       if (mounted) {
-        setState(() {
+      setState(() {
           _message = message;
           _tips = tips;
-          _isLoading = false;
-        });
+        _isLoading = false;
+      });
       }
     } catch (_) {
       if (mounted) {
@@ -934,64 +999,59 @@ class _AiTabState extends State<_AiTab> {
     
     if (_message.isEmpty && _tips.isEmpty) {
       return Text(
-        '표시할 인사이트가 없습니다.',
-        style: AppTextStyles.bodyMedium.copyWith(
-          color: AppColors.textSecondary,
-        ),
+              '표시할 인사이트가 없습니다.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
       );
     }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_message.isNotEmpty)
-          _buildInsightItem(
-            title: '요약',
-            content: _message,
-            icon: Icons.analytics,
-            color: AppColors.primary,
-          ),
+            if (_message.isNotEmpty)
+              _buildInsightItem(
+                title: '요약',
+                content: _message,
+                icon: Icons.analytics,
+                color: AppColors.primary,
+              ),
         if (_message.isNotEmpty && _tips.isNotEmpty)
           const SizedBox(height: AppSizes.md),
-        if (_tips.isNotEmpty)
-          _buildInsightItem(
-            title: '권장사항',
-            content: _tips.join('\n'),
-            icon: Icons.tips_and_updates,
-            color: AppColors.success,
-          ),
-      ],
+            if (_tips.isNotEmpty)
+              _buildRecommendationsSection(),
+          ],
     );
   }
 
   Widget _buildReportSection(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 24),
-            const SizedBox(width: AppSizes.sm),
-            Text(
-              '의사 상담용 리포트',
-              style: AppTextStyles.h5.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.picture_as_pdf, color: AppColors.primary, size: 24),
+              const SizedBox(width: AppSizes.sm),
+              Text(
+                '의사 상담용 리포트',
+                style: AppTextStyles.h5.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSizes.sm),
-        Text(
-          '최근 복약 내역과 성실도 추세를 정리한 PDF를 다운로드할 수 있습니다.',
-          style: AppTextStyles.bodySmall.copyWith(
-            color: AppColors.textSecondary,
-            height: 1.4,
+            ],
           ),
-        ),
-        const SizedBox(height: AppSizes.lg),
-        _buildReportButton(context),
-      ],
+          const SizedBox(height: AppSizes.sm),
+          Text(
+            '최근 복약 내역과 성실도 추세를 정리한 PDF를 다운로드할 수 있습니다.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: AppSizes.lg),
+          _buildReportButton(context),
+        ],
     );
   }
 
@@ -1002,45 +1062,145 @@ class _AiTabState extends State<_AiTab> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(AppSizes.md),
+      padding: const EdgeInsets.all(AppSizes.lg),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.border, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                ),
+                child: Icon(icon, color: color, size: 28),
+              ),
+              const SizedBox(width: AppSizes.md),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 17,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: AppSizes.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
+          const SizedBox(height: AppSizes.md),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.7,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildRecommendationsSection() {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        border: Border.all(color: AppColors.border, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
                 ),
-                const SizedBox(height: AppSizes.sm),
-                Text(
-                  content,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.6,
-                  ),
+                child: Icon(Icons.tips_and_updates, color: AppColors.success, size: 28),
+              ),
+              const SizedBox(width: AppSizes.md),
+              Text(
+                '권장사항',
+                style: TextStyle(
+                  fontSize: 17,
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSizes.lg),
+          ..._tips.map((tip) => _buildTipItem(tip)),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildTipItem(String tip) {
+    // 이모지와 제목 분리
+    final parts = tip.split(': ');
+    if (parts.length < 2) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSizes.md),
+        child: Text(
+          tip,
+          style: TextStyle(
+            fontSize: 14,
+            color: AppColors.textPrimary,
+            height: 1.7,
+          ),
+        ),
+      );
+    }
+    
+    final String iconAndTitle = parts[0];
+    final String content = parts.sublist(1).join(': ');
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSizes.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            iconAndTitle,
+            style: TextStyle(
+              fontSize: 15,
+              color: AppColors.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: AppSizes.sm),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.7,
             ),
           ),
         ],
@@ -1133,28 +1293,28 @@ class _AiTabState extends State<_AiTab> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.primary),
                     foregroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
                   ),
-                  child: const Text('취소'),
-                ),
+            child: const Text('취소'),
+          ),
               ),
               const SizedBox(width: AppSizes.sm),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _showReportGenerated(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+            onPressed: () {
+              Navigator.of(context).pop();
+              _showReportGenerated(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    splashFactory: NoSplash.splashFactory,
+              splashFactory: NoSplash.splashFactory,
                     padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
-                  ),
+            ),
                   child: const Text('생성하기'),
                 ),
               ),
@@ -1335,7 +1495,7 @@ class _LineChartPainter extends CustomPainter {
         maxIndex = i;
       }
     }
-    
+
     // 평균 라인 점선 그리기 (데이터 포인트 그리기 전에)
     if (averageY.isFinite && averageY >= 20 && averageY <= 20 + chartHeight) {
       final dashedLinePaint = Paint()
@@ -1412,7 +1572,7 @@ class _LineChartPainter extends CustomPainter {
       
       canvas.drawCircle(Offset(x, y), pointRadius, pointPaintSelected);
       if (!isSelected) {
-        canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
+      canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
         canvas.drawCircle(Offset(x, y), 4, pointPaintSelected);
       }
 
@@ -1550,7 +1710,7 @@ class _WeeklyChartPainter extends CustomPainter {
         maxIndex = i;
       }
     }
-    
+
     // 평균 라인 점선 그리기 (데이터 포인트 그리기 전에)
     if (averageY.isFinite && averageY >= 20 && averageY <= 20 + chartHeight) {
       final dashedLinePaint = Paint()
@@ -1633,7 +1793,7 @@ class _WeeklyChartPainter extends CustomPainter {
       
       canvas.drawCircle(Offset(x, y), pointRadius, pointPaintSelected);
       if (!isSelected && !isToday) {
-        canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
+      canvas.drawCircle(Offset(x, y), 6, Paint()..color = Colors.white..style = PaintingStyle.fill);
         canvas.drawCircle(Offset(x, y), 4, pointPaintSelected);
       }
 

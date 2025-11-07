@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS medications (
     start_date DATE NOT NULL,
     end_date DATE,
     is_indefinite BOOLEAN DEFAULT FALSE,
+    item_image_url TEXT,
+    -- 유효기간 연동 필드 (공공데이터 API)
+    expiry_date DATE,                               -- 실제 만료일 (파싱 가능 시)
+    valid_term_text VARCHAR(100),                   -- 품목유효기간 원문(파싱 불가 시 보관)
+    renewal_deadline DATE,                          -- 갱신신청기한
+    api_item_seq VARCHAR(50),                       -- 품목기준코드
+    api_item_no VARCHAR(50),                        -- 허가번호
+    api_entp_name VARCHAR(255),                     -- 업체명(검증용)
+    api_last_checked TIMESTAMP,                     -- API 마지막 조회 시각
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

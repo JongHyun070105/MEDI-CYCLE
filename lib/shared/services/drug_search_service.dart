@@ -7,8 +7,23 @@ class DrugSearchService {
   static const String _workerBaseUrl =
       'https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev';
 
-  /// 의약품명으로 검색하여 자동완성 제안 목록을 반환
+  /// 의약품명으로 검색하여 자동완성 제안 목록을 반환 (약 이름만)
   static Future<List<String>> searchDrugNames(String query) async {
+    if (query.isEmpty || query.length < 2) {
+      return [];
+    }
+
+    try {
+      final results = await searchDrugsWithDetails(query);
+      return results.map((r) => r['itemName'] as String).toList();
+    } catch (e) {
+      print('의약품 검색 중 예외 발생: $e');
+      return _getLocalDrugSuggestions(query);
+    }
+  }
+
+  /// 의약품명으로 검색하여 상세 정보 포함 목록 반환
+  static Future<List<Map<String, dynamic>>> searchDrugsWithDetails(String query) async {
     if (query.isEmpty || query.length < 2) {
       return [];
     }
@@ -28,47 +43,82 @@ class DrugSearchService {
       );
 
       print('API 응답 상태 코드: ${response.statusCode}');
-      print('API 응답 내용: ${response.body}');
 
       if (response.statusCode == 200) {
         // 응답 본문을 UTF-8로 디코딩
         final responseBody = utf8.decode(response.bodyBytes);
-        print('디코딩된 응답: $responseBody');
 
         // XML 파싱
         final document = XmlDocument.parse(responseBody);
-        final List<String> suggestions = [];
+        final List<Map<String, dynamic>> results = [];
 
-        // XML에서 itemName 추출
+        // XML에서 item 정보 추출
         final items = document.findAllElements('item');
         print('API 응답에서 ${items.length}개의 아이템을 찾았습니다.');
 
         for (var item in items) {
           final itemNameElement = item.findElements('itemName').firstOrNull;
+          final entpNameElement = item.findElements('entpName').firstOrNull;
+          final itemImageElement = item.findElements('itemImage').firstOrNull;
+          final mainIngrElement = item.findElements('mainIngr').firstOrNull;
+          final mainItemIngrElement = item.findElements('mainItemIngr').firstOrNull;
+          
           if (itemNameElement != null) {
             final itemName = itemNameElement.text.trim();
             if (itemName.isNotEmpty) {
-              suggestions.add(itemName);
-              print('추가된 의약품: $itemName');
+              // 성분 정보 추출: mainIngr -> mainItemIngr -> 약 이름에서 괄호 안 추출
+              String ingredient = '';
+              
+              // mainIngr에서 성분 추출 시도
+              if (mainIngrElement != null) {
+                final mainIngrText = mainIngrElement.text.trim();
+                if (mainIngrText.isNotEmpty) {
+                  ingredient = mainIngrText;
+                }
+              }
+              
+              // mainIngr가 비어있으면 mainItemIngr에서 추출 시도
+              if (ingredient.isEmpty && mainItemIngrElement != null) {
+                final mainItemIngrText = mainItemIngrElement.text.trim();
+                if (mainItemIngrText.isNotEmpty) {
+                  ingredient = mainItemIngrText;
+                }
+              }
+              
+              // 성분이 비어있으면 약 이름에서 괄호 안 추출 시도
+              if (ingredient.isEmpty && itemName.isNotEmpty) {
+                final match = RegExp(r'\(([^)]+)\)').firstMatch(itemName);
+                if (match != null) {
+                  ingredient = match.group(1) ?? '';
+                }
+              }
+              
+              results.add({
+                'itemName': itemName,
+                'entpName': entpNameElement?.text.trim() ?? '',
+                'itemImage': itemImageElement?.text.trim() ?? '',
+                'mainIngr': ingredient,
+              });
+              print('추가된 의약품: $itemName (제조사: ${entpNameElement?.text.trim() ?? '없음'}, 성분: ${ingredient.isNotEmpty ? ingredient : '없음'}, 이미지: ${itemImageElement?.text.trim() ?? '없음'})');
             }
           }
         }
 
-        // API에서 결과가 있으면 반환, 없으면 로컬 데이터 사용
-        if (suggestions.isNotEmpty) {
-          print('API에서 ${suggestions.length}개의 의약품을 찾았습니다: $suggestions');
-          return suggestions;
+        // API에서 결과가 있으면 반환, 없으면 빈 리스트
+        if (results.isNotEmpty) {
+          print('API에서 ${results.length}개의 의약품을 찾았습니다.');
+          return results;
         } else {
-          print('API에서 검색 결과가 없어 로컬 데이터를 사용합니다.');
-          return _getLocalDrugSuggestions(query);
+          print('API에서 검색 결과가 없습니다.');
+          return [];
         }
       } else {
         print('의약품 검색 API 오류: ${response.statusCode} - ${response.body}');
-        return _getLocalDrugSuggestions(query);
+        return [];
       }
     } catch (e) {
       print('의약품 검색 중 예외 발생: $e');
-      return _getLocalDrugSuggestions(query);
+      return [];
     }
   }
 
@@ -102,13 +152,44 @@ class DrugSearchService {
 
         if (items.isNotEmpty) {
           final item = items.first;
+          final mainIngrElement = item.findElements('mainIngr').firstOrNull;
+          final mainItemIngrElement = item.findElements('mainItemIngr').firstOrNull;
+          final itemName = item.findElements('itemName').firstOrNull?.text.trim() ?? '';
+          
+          // 성분 정보 추출: mainIngr -> mainItemIngr -> 약 이름에서 괄호 안 추출
+          String ingredient = '';
+          
+          // mainIngr에서 성분 추출 시도
+          if (mainIngrElement != null) {
+            final mainIngrText = mainIngrElement.text.trim();
+            if (mainIngrText.isNotEmpty) {
+              ingredient = mainIngrText;
+            }
+          }
+          
+          // mainIngr가 비어있으면 mainItemIngr에서 추출 시도
+          if (ingredient.isEmpty && mainItemIngrElement != null) {
+            final mainItemIngrText = mainItemIngrElement.text.trim();
+            if (mainItemIngrText.isNotEmpty) {
+              ingredient = mainItemIngrText;
+            }
+          }
+          
+          // 성분이 비어있으면 약 이름에서 괄호 안 추출 시도
+          if (ingredient.isEmpty && itemName.isNotEmpty) {
+            final match = RegExp(r'\(([^)]+)\)').firstMatch(itemName);
+            if (match != null) {
+              ingredient = match.group(1) ?? '';
+            }
+          }
+          
           return {
             'entpName':
                 item.findElements('entpName').firstOrNull?.text.trim() ?? '',
-            'itemName':
-                item.findElements('itemName').firstOrNull?.text.trim() ?? '',
+            'itemName': itemName,
             'itemSeq':
                 item.findElements('itemSeq').firstOrNull?.text.trim() ?? '',
+            'mainIngr': ingredient,
             'efcyQesitm':
                 item.findElements('efcyQesitm').firstOrNull?.text.trim() ?? '',
             'useMethodQesitm':
@@ -130,12 +211,12 @@ class DrugSearchService {
                     ?.text
                     .trim() ??
                 '',
+            'itemImage':
+                item.findElements('itemImage').firstOrNull?.text.trim() ?? '',
             'openDe':
                 item.findElements('openDe').firstOrNull?.text.trim() ?? '',
             'updateDe':
                 item.findElements('updateDe').firstOrNull?.text.trim() ?? '',
-            'itemImage':
-                item.findElements('itemImage').firstOrNull?.text.trim() ?? '',
           };
         } else {
           print('약 상세 정보: 검색 결과가 없습니다.');

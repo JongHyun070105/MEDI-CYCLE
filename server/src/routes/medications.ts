@@ -25,6 +25,8 @@ import { authenticateToken } from "../middleware/auth.js";
 import { getMonthlyAdherence } from "../controllers/statsController.js";
 import { getHealthInsights } from "../controllers/insightsController.js";
 import { generateReport } from "../controllers/reportController.js";
+import { listExpiryStatus, triggerUserValidityUpdate } from "../controllers/expiryController.js";
+import { updateMissingMedicationImages } from "../services/expiryUpdateService.js";
 
 const router = express.Router();
 
@@ -33,28 +35,34 @@ router.use(authenticateToken);
 
 router.post("/", registerMedication);
 router.get("/", getMedications);
-router.get("/:id", getMedicationById);
-router.put("/:id", updateMedication);
-router.delete("/:id", deleteMedication);
 
-// Medication intake routes
+// 특정 라우트들을 :id 라우트보다 먼저 정의
+router.get("/personalized-schedule", getPersonalizedMedicationSchedule);
 router.post("/intake/record", recordMedicationIntake);
 router.get("/intake/list", getMedicationIntakes);
-router.put("/intake/:id", updateMedicationIntake);
-router.delete("/intake/:id", deleteMedicationIntake);
-
-// Chatbot routes
 router.post("/chat/send", sendChatMessage);
 router.get("/chat/history", getChatHistory);
 router.delete("/chat/history", deleteChatHistory);
-
-// Stats routes
 router.get("/stats/adherence/monthly", getMonthlyAdherence);
 router.get("/stats/insights", getHealthInsights);
 router.get("/report/pdf", generateReport);
+router.get("/expiry/list", listExpiryStatus);
+router.post("/expiry/check", triggerUserValidityUpdate);
+router.post("/images/check", async (_req, res) => {
+  try {
+    await updateMissingMedicationImages();
+    res.json({ message: "이미지 보정 완료" });
+  } catch (e) {
+    res.status(500).json({ error: "이미지 보정 중 오류" });
+  }
+});
 
-// Feedback routes (ML 모델 통합)
+// :id 라우트는 마지막에 정의
+router.get("/:id", getMedicationById);
+router.put("/:id", updateMedication);
+router.delete("/:id", deleteMedication);
+router.put("/intake/:id", updateMedicationIntake);
+router.delete("/intake/:id", deleteMedicationIntake);
 router.post("/:id/feedback", submitFeedback);
-router.get("/personalized-schedule", getPersonalizedMedicationSchedule);
 
 export default router;

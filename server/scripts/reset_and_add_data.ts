@@ -77,13 +77,34 @@ async function resetAndAddData() {
       },
     ];
 
+    // 유효기간 30일 남은 약 추가
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    const expiryDateStr = expiryDate.toISOString().split('T')[0];
+    
+    const expiryMedication = {
+      drug_name: "유효기간테스트약",
+      manufacturer: "테스트제약",
+      ingredient: "테스트성분",
+      frequency: 2,
+      dosage_times: ["09:00", "21:00"],
+      meal_relations: ["아침", "저녁"],
+      meal_offsets: [0, 0],
+      expiry_date: expiryDateStr,
+    };
+
+    medications.push(expiryMedication);
+
     const insertedMedIds: number[] = [];
 
     for (const med of medications) {
+      const hasExpiryDate = 'expiry_date' in med;
+      const expiryDate = hasExpiryDate ? (med as any).expiry_date : null;
+      
       const result = await query(
         `INSERT INTO medications 
-         (user_id, drug_name, manufacturer, ingredient, frequency, dosage_times, meal_relations, meal_offsets, start_date, end_date, is_indefinite)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (user_id, drug_name, manufacturer, ingredient, frequency, dosage_times, meal_relations, meal_offsets, start_date, end_date, is_indefinite, expiry_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING id`,
         [
           userId,
@@ -97,11 +118,13 @@ async function resetAndAddData() {
           startDate,
           endDate,
           false,
+          expiryDate,
         ]
       );
 
       insertedMedIds.push(result.rows[0].id);
-      console.log(`   ✅ ${med.drug_name} 등록 완료 (ID: ${result.rows[0].id})`);
+      const expiryInfo = expiryDate ? ` (유효기간: ${expiryDate})` : '';
+      console.log(`   ✅ ${med.drug_name} 등록 완료 (ID: ${result.rows[0].id})${expiryInfo}`);
     }
 
     console.log("\n📊 복용 데이터 생성 중...");

@@ -3,9 +3,9 @@ main = "src/cloudflare/index.ts"
 compatibility_date = "2024-10-27"
 
 [env.development]
-vars = { BACKEND_URL = "https://complexity-into-trackback-hired.trycloudflare.com" }
+vars = { BACKEND_URL = "https://cult-physically-fire-pink.trycloudflare.com" }
 secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY", "KAKAO_REST_API_KEY", "KAKAO_JS_APP_KEY"]
 
 [env.production]
-vars = { BACKEND_URL = "https://complexity-into-trackback-hired.trycloudflare.com" }
+vars = { BACKEND_URL = "https://cult-physically-fire-pink.trycloudflare.com" }
 secrets = ["ADDRESS_API_KEY", "GEMINI_API_KEY", "EAPIYAK_SERVICE_KEY", "KAKAO_REST_API_KEY", "KAKAO_JS_APP_KEY"]

@@ -3,6 +3,7 @@ export interface Env {
   ADDRESS_API_KEY: string;
   GEMINI_API_KEY: string;
   EAPIYAK_SERVICE_KEY: string;
+  PUBLIC_DATA_API_KEY_DECODED: string;
   KAKAO_REST_API_KEY?: string;
   KAKAO_JS_APP_KEY?: string;
 }
@@ -48,6 +49,11 @@ export default {
       // Drug detail (MFDS DrbEasyDrugInfoService - single item)
       if (pathname === "/drug-detail") {
         return handleDrugDetail(request, env);
+      }
+
+      // Drug validity (식품의약품안전처_의약품 품목 유효기간 정보)
+      if (pathname === "/drug-validity") {
+        return handleDrugValidity(request, env);
       }
 
       // Kakao Local API proxy - keyword place search
@@ -413,7 +419,7 @@ async function handleDrugSearch(request: Request, env: Env): Promise<Response> {
   }
 
   const base =
-    "http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
+    "https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
   const fullUrl = `${base}?serviceKey=${encodeURIComponent(
     env.EAPIYAK_SERVICE_KEY
   )}&itemName=${encodeURIComponent(itemName)}&pageNo=${encodeURIComponent(
@@ -426,7 +432,33 @@ async function handleDrugSearch(request: Request, env: Env): Promise<Response> {
         Accept: "application/xml; charset=utf-8",
         "Content-Type": "application/xml; charset=utf-8",
       },
+      // Cloudflare Worker timeout: 30초
+      // @ts-expect-error - cf is a Cloudflare Worker specific property
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: false,
+      },
     });
+
+    if (!upstream.ok) {
+      const errorText = await upstream.text();
+      console.error(`Drug search API error: ${upstream.status} - ${errorText}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Drug search API error",
+          status: upstream.status,
+        }),
+        {
+          status: upstream.status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
     const body = await upstream.text();
     return new Response(body, {
       status: upstream.status,
@@ -437,8 +469,13 @@ async function handleDrugSearch(request: Request, env: Env): Promise<Response> {
       },
     });
   } catch (error) {
+    console.error("Drug search fetch error:", error);
     return new Response(
-      JSON.stringify({ success: false, message: "Drug search error" }),
+      JSON.stringify({
+        success: false,
+        message: "Drug search error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
       {
         status: 500,
         headers: {
@@ -469,7 +506,7 @@ async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
   }
 
   const base =
-    "http://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
+    "https://apis.data.go.kr/1471000/DrbEasyDrugInfoService/getDrbEasyDrugList";
   const fullUrl = `${base}?serviceKey=${encodeURIComponent(
     env.EAPIYAK_SERVICE_KEY
   )}&itemName=${encodeURIComponent(itemName)}&numOfRows=1`;
@@ -480,7 +517,33 @@ async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
         Accept: "application/xml; charset=utf-8",
         "Content-Type": "application/xml; charset=utf-8",
       },
+      // Cloudflare Worker timeout: 30초
+      // @ts-expect-error - cf is a Cloudflare Worker specific property
+      cf: {
+        cacheTtl: 300,
+        cacheEverything: false,
+      },
     });
+
+    if (!upstream.ok) {
+      const errorText = await upstream.text();
+      console.error(`Drug detail API error: ${upstream.status} - ${errorText}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Drug detail API error",
+          status: upstream.status,
+        }),
+        {
+          status: upstream.status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
     const body = await upstream.text();
     return new Response(body, {
       status: upstream.status,
@@ -491,8 +554,114 @@ async function handleDrugDetail(request: Request, env: Env): Promise<Response> {
       },
     });
   } catch (error) {
+    console.error("Drug detail fetch error:", error);
     return new Response(
-      JSON.stringify({ success: false, message: "Drug detail error" }),
+      JSON.stringify({
+        success: false,
+        message: "Drug detail error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+}
+
+// 식품의약품안전처_의약품 품목 유효기간 정보 API
+async function handleDrugValidity(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const url = new URL(request.url);
+  const itemName = url.searchParams.get("item_name");
+  const entpName = url.searchParams.get("entp_name");
+  const pageNo = url.searchParams.get("pageNo") || "1";
+  const numOfRows = url.searchParams.get("numOfRows") || "100";
+
+  if (!itemName) {
+    return new Response(
+      JSON.stringify({ success: false, message: "item_name is required" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  const base =
+    "https://apis.data.go.kr/1471000/DrugPrdlstVldPrdInfoService01/getDrugPrdlstVldPrdInfoService01";
+  const params = new URLSearchParams({
+    serviceKey: env.PUBLIC_DATA_API_KEY_DECODED,
+    type: "json",
+    pageNo,
+    numOfRows,
+    item_name: itemName,
+  });
+  if (entpName) {
+    params.set("entp_name", entpName);
+  }
+
+  const fullUrl = `${base}?${params.toString()}`;
+
+  try {
+    const upstream = await fetch(fullUrl, {
+      headers: {
+        Accept: "application/json; charset=utf-8",
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      // @ts-expect-error - cf is a Cloudflare Worker specific property
+      cf: {
+        cacheTtl: 3600,
+        cacheEverything: false,
+      },
+    });
+
+    if (!upstream.ok) {
+      const errorText = await upstream.text();
+      console.error(
+        `Drug validity API error: ${upstream.status} - ${errorText}`
+      );
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Drug validity API error",
+          status: upstream.status,
+        }),
+        {
+          status: upstream.status,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    }
+
+    const body = await upstream.text();
+    return new Response(body, {
+      status: upstream.status,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=600",
+      },
+    });
+  } catch (error) {
+    console.error("Drug validity fetch error:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: "Drug validity error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
       {
         status: 500,
         headers: {

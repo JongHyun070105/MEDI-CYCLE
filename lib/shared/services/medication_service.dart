@@ -149,6 +149,31 @@ class MedicationService {
         return offsets.length > i && offsets[i] != null ? offsets[i]! : 0;
       });
 
+      // notes에서 제조사, 성분, itemImageUrl 추출
+      String? manufacturer;
+      String? ingredient;
+      String? itemImageUrl;
+      if (request.notes != null) {
+        final notes = request.notes!;
+        if (notes.contains('제조사:')) {
+          manufacturer = notes.split('제조사:').last.split('\n').first.trim();
+          if (manufacturer.isEmpty) manufacturer = null;
+        }
+        if (notes.contains('성분:')) {
+          ingredient = notes.split('성분:').last.split('\n').first.trim();
+          if (ingredient.isEmpty) ingredient = null;
+        }
+        if (notes.contains('itemImageUrl:')) {
+          itemImageUrl = notes
+              .split('itemImageUrl:')
+              .last
+              .split('\n')
+              .first
+              .trim();
+          if (itemImageUrl.isEmpty) itemImageUrl = null;
+        }
+      }
+
       final Map<String, dynamic> payload = {
         'drug_name': request.name,
         'frequency': frequency,
@@ -160,6 +185,14 @@ class MedicationService {
             ? request.endDate!.toIso8601String().split('T')[0]
             : null,
         'is_indefinite': request.isIndefinite,
+        if (manufacturer != null &&
+            manufacturer.isNotEmpty &&
+            manufacturer != '-')
+          'manufacturer': manufacturer,
+        if (ingredient != null && ingredient.isNotEmpty && ingredient != '-')
+          'ingredient': ingredient,
+        if (itemImageUrl != null && itemImageUrl.isNotEmpty)
+          'item_image_url': itemImageUrl,
       };
 
       final response = await _apiService.post<Map<String, dynamic>>(
@@ -229,6 +262,7 @@ class MedicationService {
     String? manufacturer,
     String? ingredient,
     String? notes,
+    String? itemImageUrl,
   }) {
     // 복용 시간을 서버 형식으로 변환
     Map<String, dynamic> data = {
@@ -255,7 +289,7 @@ class MedicationService {
     }
 
     // 메모에 제조사와 성분 정보 포함
-    if (manufacturer != null || ingredient != null) {
+    if (manufacturer != null || ingredient != null || itemImageUrl != null) {
       List<String> memoParts = [];
       if (manufacturer != null &&
           manufacturer.isNotEmpty &&
@@ -267,6 +301,9 @@ class MedicationService {
       }
       if (notes != null && notes.isNotEmpty) {
         memoParts.add('기타: $notes');
+      }
+      if (itemImageUrl != null && itemImageUrl.isNotEmpty) {
+        memoParts.add('itemImageUrl: $itemImageUrl');
       }
       if (memoParts.isNotEmpty) {
         data['notes'] = memoParts.join('\n');

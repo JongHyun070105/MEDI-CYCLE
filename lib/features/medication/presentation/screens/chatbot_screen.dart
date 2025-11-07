@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_responsive.dart';
 import '../../../../shared/controllers/chat_controller.dart';
 
 class ChatbotScreen extends ConsumerStatefulWidget {
@@ -268,14 +269,24 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(AppSizes.radiusRound),
-            ),
-            child: const Icon(Icons.smart_toy, color: Colors.white, size: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double iconSize = (MediaQuery.of(context).size.width * 0.08)
+                  .clamp(28.0, 36.0);
+              return Container(
+                width: iconSize,
+                height: iconSize,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(iconSize / 2),
+                ),
+                child: Icon(
+                  Icons.smart_toy,
+                  color: Colors.white,
+                  size: iconSize * 0.55,
+                ),
+              );
+            },
           ),
           const SizedBox(width: AppSizes.sm),
           Flexible(
@@ -317,14 +328,27 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!message.isUser) ...[
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(AppSizes.radiusRound),
-              ),
-              child: const Icon(Icons.smart_toy, color: Colors.white, size: 18),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final double iconSize =
+                    (MediaQuery.of(context).size.width * 0.08).clamp(
+                      28.0,
+                      36.0,
+                    );
+                return Container(
+                  width: iconSize,
+                  height: iconSize,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(iconSize / 2),
+                  ),
+                  child: Icon(
+                    Icons.smart_toy,
+                    color: Colors.white,
+                    size: iconSize * 0.55,
+                  ),
+                );
+              },
             ),
             const SizedBox(width: AppSizes.sm),
           ],
@@ -367,18 +391,27 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
           ),
           if (message.isUser) ...[
             const SizedBox(width: AppSizes.sm),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppSizes.radiusRound),
-              ),
-              child: const Icon(
-                Icons.person,
-                color: AppColors.primary,
-                size: 18,
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final double iconSize =
+                    (MediaQuery.of(context).size.width * 0.08).clamp(
+                      28.0,
+                      36.0,
+                    );
+                return Container(
+                  width: iconSize,
+                  height: iconSize,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(iconSize / 2),
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    color: AppColors.primary,
+                    size: iconSize * 0.55,
+                  ),
+                );
+              },
             ),
           ],
         ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_responsive.dart';
 import '../widgets/medication_stats.dart';
 import '../widgets/pillbox_stats.dart';
 import 'medication_registration_screen.dart';
@@ -13,6 +14,12 @@ import 'chatbot_screen.dart';
 import '../../../auth/presentation/screens/settings_screen.dart';
 import '../../../../shared/services/api_client.dart';
 import '../../../../shared/services/notification_service.dart';
+import '../../../../shared/services/rpi_pillbox_service.dart';
+import '../widgets/expired_medication_modal.dart';
+import '../widgets/imminent_expiry_modal.dart';
+import '../widgets/medication_period_end_modal.dart';
+import '../widgets/speed_dial_fab.dart';
+import 'drug_search_screen.dart';
 
 class MedicationHomeScreen extends ConsumerStatefulWidget {
   const MedicationHomeScreen({super.key});
@@ -29,6 +36,19 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
       GlobalKey<_MedicationTabState>();
   final GlobalKey<MedicationBoxScreenState> _medicationBoxScreenKey =
       GlobalKey<MedicationBoxScreenState>();
+  bool _expiryModalShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 앱 진입 시 유효기간 알림 스케줄링 및 모달 확인
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await notificationService.scheduleExpiryAlertsForUser();
+        await _showModalSequence();
+      } catch (_) {}
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +84,13 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const _DisposalTab(),
+          _DisposalTab(
+            onNavigateToHome: () {
+              setState(() {
+                _currentIndex = 2; // 홈 탭으로 이동
+              });
+            },
+          ),
             _MedicationTab(
             key: _medicationTabKey,
             onMedicationDeleted: () {
@@ -81,7 +107,16 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
             },
           ),
           _HomeTab(key: _homeTabKey),
-          _PharmacyTab(medicationBoxScreenKey: _medicationBoxScreenKey),
+          _PharmacyTab(
+            medicationBoxScreenKey: _medicationBoxScreenKey,
+            onLockStatusChanged: () {
+              // 약상자 화면에서 잠금 상태가 변경되면 메인 화면의 약상자 상태도 업데이트
+              final homeTabState = _homeTabKey.currentState;
+              if (homeTabState != null) {
+                homeTabState.refreshPillboxStats();
+              }
+            },
+          ),
           const _ProfileTab(),
         ],
       ),
@@ -160,37 +195,33 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: "main_fab",
-        onPressed: () async {
-          if (_currentIndex == 1) {
-            // 약 등록 탭일 때는 약 등록 화면으로 이동
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MedicationRegistrationScreen(
-                  onMedicationAdded: (medication) {
-                    // 약이 추가될 때마다 리스트에 추가
-                    _medicationTabKey.currentState?.addMedication(medication);
-                    final homeTabState = _homeTabKey.currentState;
-                    if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
-                      homeTabState.refreshAll();
-                    }
-                  },
-                ),
-              ),
-            );
-            if (result != null && result is Map<String, dynamic>) {
-              _medicationTabKey.currentState?.addMedication(result);
-              final homeTabState = _homeTabKey.currentState;
-              if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
-                homeTabState.refreshAll();
-              }
-            }
-                // 약 등록 후 홈 탭으로 자동 이동 및 새로고침
+      floatingActionButton: _currentIndex == 1
+          ? SpeedDialFab(
+              onRegisterPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MedicationRegistrationScreen(
+                      onMedicationAdded: (medication) {
+                        _medicationTabKey.currentState?.addMedication(medication);
+                        final homeTabState = _homeTabKey.currentState;
+                        if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                          homeTabState.refreshAll();
+                        }
+                      },
+                    ),
+                  ),
+                );
+                if (result != null && result is Map<String, dynamic>) {
+                  _medicationTabKey.currentState?.addMedication(result);
+                  final homeTabState = _homeTabKey.currentState;
+                  if (homeTabState != null && homeTabState._hasCompletedInitialLoad) {
+                    homeTabState.refreshAll();
+                  }
+                }
                 if (result != null) {
                   setState(() {
-                    _currentIndex = 2; // 홈 탭으로 이동
+                    _currentIndex = 2;
                   });
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     final homeTabState = _homeTabKey.currentState;
@@ -199,25 +230,168 @@ class _MedicationHomeScreenState extends ConsumerState<MedicationHomeScreen> {
                     }
                   });
                 }
-          } else {
-                // 다른 탭일 때는 챗봇으로 이동 (새로고침 없이)
+              },
+              onSearchPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DrugSearchScreen(),
+                  ),
+                );
+              },
+            )
+          : FloatingActionButton(
+              heroTag: "chat_fab",
+              onPressed: () async {
                 await Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const ChatbotScreen()),
-            );
-                // 챗봇에서 돌아올 때는 새로고침하지 않음 (인디케이터 없이)
-          }
-        },
-        backgroundColor: AppColors.primary,
-        splashColor: Colors.transparent,
-        child: Icon(
-          _currentIndex == 1 ? Icons.add : Icons.chat,
-          color: Colors.white,
-        ),
-      ),
+                  MaterialPageRoute(builder: (context) => const ChatbotScreen()),
+                );
+              },
+              backgroundColor: AppColors.primary,
+              splashColor: Colors.transparent,
+              child: const Icon(Icons.chat, color: Colors.white),
+            ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         ),
       ],
     );
+  }
+
+  Future<void> _showModalSequence() async {
+    if (_expiryModalShown) return;
+    
+    try {
+      final api = ApiClient();
+      
+      // 1. 유통기한 정보 조회
+      final data = await api.getExpiryStatus(windowDays: 30);
+      final List<Map<String, dynamic>> imminent =
+          List<Map<String, dynamic>>.from((data['imminent'] as List?) ?? const []);
+      final List<Map<String, dynamic>> expired =
+          List<Map<String, dynamic>>.from((data['expired'] as List?) ?? const []);
+
+      // 유통기한 지난 약이 있으면 강제잠금 트리거
+      try {
+        if (expired.isNotEmpty) {
+          await rpiPillboxService.setExpiryForceLock(true);
+        }
+      } catch (_) {}
+      
+      // 2. 복용기간 종료된 약 조회
+      final response = await api.getMedications();
+      final List<Map<String, dynamic>> meds = List<Map<String, dynamic>>.from(
+        response['medications'] ?? [],
+      );
+      final now = DateTime.now();
+      final List<Map<String, dynamic>> periodEnded = [];
+      
+      for (final med in meds) {
+        if (_isMedicationPeriodEnded(med, now)) {
+          // 약 정보 매핑 (표시용)
+          final mapped = {
+            'id': med['id'],
+            'name': med['drug_name'] ?? med['name'] ?? '이름 미상',
+            'drug_name': med['drug_name'] ?? med['name'] ?? '이름 미상',
+            'end_date': med['end_date'] ?? med['endDate'],
+          };
+          periodEnded.add(mapped);
+        }
+      }
+      
+      _expiryModalShown = true;
+      
+      // 3. 순서대로 모달 표시: 만료된 약 -> 임박한 약 -> 복용기간 종료
+      
+      // 3-1. 만료된 약 모달
+      if (expired.isNotEmpty) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => ExpiredMedicationModal(
+            expiredMedications: expired,
+            onGoDisposal: () {
+              if (!mounted) return;
+              setState(() {
+                _currentIndex = 0; // '폐의약품' 탭으로 이동
+              });
+            },
+          ),
+        );
+      }
+      
+      // 3-2. 임박한 약 모달
+      if (imminent.isNotEmpty) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => ImminentExpiryModal(
+            imminentMedications: imminent,
+          ),
+        );
+      }
+      
+      // 3-3. 복용기간 종료된 약 모달
+      if (periodEnded.isNotEmpty) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => MedicationPeriodEndModal(
+            endedMedications: periodEnded,
+          ),
+        );
+      }
+      
+    } catch (_) {}
+  }
+  
+  bool _isMedicationPeriodEnded(Map<String, dynamic> medication, DateTime now) {
+    // 원본 데이터에서 end_date와 is_indefinite 확인
+    final isIndefinite = medication['isIndefinite'] == true || 
+                        medication['is_indefinite'] == true;
+    
+    if (isIndefinite) {
+      return false; // 무기한은 종료되지 않음
+    }
+    
+    // 원본 end_date 문자열 우선 사용
+    final endDateStr = medication['end_date']?.toString() ?? 
+                       medication['endDate']?.toString();
+    
+    if (endDateStr == null || endDateStr.isEmpty || endDateStr == '-' || endDateStr == '무기한') {
+      return false; // 종료일이 없으면 종료되지 않음
+    }
+    
+    try {
+      // ISO 형식으로 파싱 시도
+      DateTime? endDate = DateTime.tryParse(endDateStr);
+      
+      if (endDate == null) {
+        // 날짜 파싱 실패 시 포맷팅된 날짜에서 파싱 시도 (YYYY년 MM월 DD일)
+        final formatted = endDateStr.replaceAll('년 ', '-').replaceAll('월 ', '-').replaceAll('일', '');
+        final parts = formatted.split('-');
+        if (parts.length == 3) {
+          final year = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final day = int.tryParse(parts[2]);
+          if (year != null && month != null && day != null) {
+            endDate = DateTime(year, month, day);
+          }
+        }
+      }
+      
+      if (endDate == null) {
+        return false; // 파싱 실패 시 종료되지 않은 것으로 간주
+      }
+      
+      // 오늘 날짜와 비교 (시간 제외)
+      final today = DateTime(now.year, now.month, now.day);
+      final end = DateTime(endDate.year, endDate.month, endDate.day);
+      return today.isAfter(end);
+    } catch (e) {
+      return false;
+    }
   }
 }
 
@@ -376,16 +550,25 @@ class _MedicationTab extends StatefulWidget {
   State<_MedicationTab> createState() => _MedicationTabState();
 }
 
-class _MedicationTabState extends State<_MedicationTab> {
+class _MedicationTabState extends State<_MedicationTab> with SingleTickerProviderStateMixin {
   // 실제 데이터는 등록 시(onMedicationAdded) 추가됨
   final List<Map<String, dynamic>> _registeredMedications = [];
+  final List<Map<String, dynamic>> _endedMedications = [];
   bool _isLoading = true;
   String? _errorMessage;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadMedications();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMedications() async {
@@ -401,12 +584,32 @@ class _MedicationTabState extends State<_MedicationTab> {
       );
       final mapped = meds.map(_mapMedication).toList();
       if (!mounted) return;
+      
+      // 복용 기간이 종료된 약과 현재 복용 중인 약 분리
+      final now = DateTime.now();
+      final List<Map<String, dynamic>> active = [];
+      final List<Map<String, dynamic>> ended = [];
+      
+      for (final med in mapped) {
+        final isEnded = _isMedicationPeriodEnded(med, now);
+        if (isEnded) {
+          ended.add(med);
+        } else {
+          active.add(med);
+        }
+      }
+      
       setState(() {
         _registeredMedications
           ..clear()
-          ..addAll(mapped);
+          ..addAll(active);
+        _endedMedications
+          ..clear()
+          ..addAll(ended);
         _isLoading = false;
       });
+      
+      // 복용 기간 종료 모달은 MedicationHomeScreen에서 처리
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -428,6 +631,7 @@ class _MedicationTabState extends State<_MedicationTab> {
           const SnackBar(
             content: Text('약이 추가되었습니다.'),
             backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
       } catch (e) {
@@ -447,18 +651,131 @@ class _MedicationTabState extends State<_MedicationTab> {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        bottom: _registeredMedications.isNotEmpty || _endedMedications.isNotEmpty
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: AnimatedBuilder(
+                  animation: _tabController,
+                  builder: (context, child) {
+                    final int currentIndex = _tabController.index;
+                    final bool isEndedTab = currentIndex == 1;
+                    return TabBar(
+                      controller: _tabController,
+                      labelColor: isEndedTab ? AppColors.error : AppColors.primary,
+                      unselectedLabelColor: AppColors.textSecondary,
+                      indicatorColor: isEndedTab ? AppColors.error : AppColors.primary,
+                      tabs: const [
+                        Tab(text: '복용 중'),
+                        Tab(text: '복용 종료'),
+                      ],
+                    );
+                  },
+                ),
+              )
+            : null,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
               ? _buildErrorState()
-              : RefreshIndicator(
-                  onRefresh: _loadMedications,
-                  color: AppColors.primary,
-                  child: _registeredMedications.isEmpty
-                      ? _buildEmptyState()
-                      : _buildMedicationList(),
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    RefreshIndicator(
+                      onRefresh: _loadMedications,
+                      color: AppColors.primary,
+                      child: _registeredMedications.isEmpty
+                          ? _buildEmptyState()
+                          : _buildMedicationList(_registeredMedications),
+                    ),
+                    RefreshIndicator(
+                      onRefresh: _loadMedications,
+                      color: AppColors.primary,
+                      child: _endedMedications.isEmpty
+                          ? _buildEmptyStateForEnded()
+                          : _buildMedicationList(_endedMedications),
+                    ),
+                  ],
                 ),
+    );
+  }
+  
+  bool _isMedicationPeriodEnded(Map<String, dynamic> medication, DateTime now) {
+    // 원본 데이터에서 end_date와 is_indefinite 확인
+    final isIndefinite = medication['isIndefinite'] == true || 
+                        medication['is_indefinite'] == true;
+    
+    if (isIndefinite) {
+      return false; // 무기한은 종료되지 않음
+    }
+    
+    // 원본 end_date 문자열 우선 사용
+    final endDateStr = medication['end_date']?.toString() ?? 
+                       medication['endDate']?.toString();
+    
+    if (endDateStr == null || endDateStr.isEmpty || endDateStr == '-' || endDateStr == '무기한') {
+      return false; // 종료일이 없으면 종료되지 않음
+    }
+    
+    try {
+      // ISO 형식으로 파싱 시도
+      DateTime? endDate = DateTime.tryParse(endDateStr);
+      
+      if (endDate == null) {
+        // 날짜 파싱 실패 시 포맷팅된 날짜에서 파싱 시도 (YYYY년 MM월 DD일)
+        final formatted = endDateStr.replaceAll('년 ', '-').replaceAll('월 ', '-').replaceAll('일', '');
+        final parts = formatted.split('-');
+        if (parts.length == 3) {
+          final year = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final day = int.tryParse(parts[2]);
+          if (year != null && month != null && day != null) {
+            endDate = DateTime(year, month, day);
+          }
+        }
+      }
+      
+      if (endDate == null) {
+        return false; // 파싱 실패 시 종료되지 않은 것으로 간주
+      }
+      
+      // 오늘 날짜와 비교 (시간 제외)
+      final today = DateTime(now.year, now.month, now.day);
+      final end = DateTime(endDate.year, endDate.month, endDate.day);
+      return today.isAfter(end);
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  
+  Widget _buildEmptyStateForEnded() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSizes.md),
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          const SizedBox(height: AppSizes.md),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.textSecondary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(40),
+              border: Border.all(color: AppColors.textSecondary, width: 2),
+            ),
+            child: Icon(Icons.check_circle_outline, size: 40, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSizes.md),
+          Text(
+            '복용 기간 종료된 약이 없습니다',
+            style: AppTextStyles.h3.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -585,7 +902,8 @@ class _MedicationTabState extends State<_MedicationTab> {
     );
   }
 
-  Widget _buildMedicationList() {
+  Widget _buildMedicationList(List<Map<String, dynamic>> medications) {
+    final isEndedList = medications == _endedMedications;
     return ListView.builder(
       padding: EdgeInsets.only(
         left: AppSizes.md,
@@ -593,15 +911,15 @@ class _MedicationTabState extends State<_MedicationTab> {
         top: AppSizes.md,
         bottom: AppSizes.xl * 3, // FAB과 하단 네비게이션 바 고려한 넉넉한 패딩
       ),
-      itemCount: _registeredMedications.length,
+      itemCount: medications.length,
       itemBuilder: (context, index) {
-        final medication = _registeredMedications[index];
-        return _buildMedicationCard(medication, index);
+        final medication = medications[index];
+        return _buildMedicationCard(medication, index, isEndedList);
       },
     );
   }
 
-  Widget _buildMedicationCard(Map<String, dynamic> medication, int index) {
+  Widget _buildMedicationCard(Map<String, dynamic> medication, int index, [bool isEnded = false]) {
     final List<String> times =
         List<String>.from(medication['times'] ?? const <String>[]);
     // 시간 순서대로 정렬
@@ -633,18 +951,9 @@ class _MedicationTabState extends State<_MedicationTab> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Icon(
-                    Icons.medication,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
+                _MedicationAvatar(
+                  imageUrl: medication['imageUrl'] as String?,
+                  isEnded: isEnded,
                 ),
                 const SizedBox(width: AppSizes.md),
                 Expanded(
@@ -671,9 +980,9 @@ class _MedicationTabState extends State<_MedicationTab> {
                 PopupMenuButton<String>(
                   onSelected: (value) {
                     if (value == 'edit') {
-                      _editMedication(index);
+                      _editMedication(index, isEnded);
                     } else if (value == 'delete') {
-                      _deleteMedication(index);
+                      _deleteMedication(index, isEnded);
                     }
                   },
                   itemBuilder: (context) => [
@@ -734,20 +1043,23 @@ class _MedicationTabState extends State<_MedicationTab> {
     );
   }
 
-  void _editMedication(int index) {
+  void _editMedication(int index, [bool isEnded = false]) {
+    final medications = isEnded ? _endedMedications : _registeredMedications;
     // TODO: 약 수정 화면으로 이동
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${_registeredMedications[index]['name']} 수정 기능은 준비 중입니다.',
+          '${medications[index]['name']} 수정 기능은 준비 중입니다.',
         ),
         backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.fixed,
       ),
     );
   }
 
-  void _deleteMedication(int index) async {
-    final medication = _registeredMedications[index];
+  void _deleteMedication(int index, [bool isEnded = false]) async {
+    final medications = isEnded ? _endedMedications : _registeredMedications;
+    final medication = medications[index];
     final medicationId = medication['id'] as int?;
     
     if (medicationId == null) {
@@ -755,6 +1067,7 @@ class _MedicationTabState extends State<_MedicationTab> {
         const SnackBar(
           content: Text('약 ID를 찾을 수 없습니다.'),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.fixed,
         ),
       );
       return;
@@ -807,6 +1120,7 @@ class _MedicationTabState extends State<_MedicationTab> {
           const SnackBar(
             content: Text('약이 삭제되었습니다.'),
             backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
       }
@@ -816,6 +1130,7 @@ class _MedicationTabState extends State<_MedicationTab> {
           SnackBar(
             content: Text('약 삭제 중 오류가 발생했습니다: ${e.toString()}'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
       }
@@ -920,6 +1235,10 @@ class _MedicationTabState extends State<_MedicationTab> {
       'id': medication['id'],
       'name': medication['drug_name'] ?? medication['name'] ?? '이름 미상',
       'manufacturer': medication['manufacturer'] ?? '-',
+      'imageUrl': medication['item_image_url'] != null &&
+              (medication['item_image_url'] as String).isNotEmpty
+          ? medication['item_image_url'].toString()
+          : null,
       'times': times,
       'frequency': medication['frequency'] is num
           ? '하루 ${(medication['frequency'] as num).toInt()}회'
@@ -928,12 +1247,87 @@ class _MedicationTabState extends State<_MedicationTab> {
       'endDate': isIndefinite
           ? '무기한'
           : (endDateRaw.isEmpty ? '-' : _formatDate(endDateRaw)),
+      'end_date': endDateRaw.isEmpty ? null : endDateRaw,
+      'is_indefinite': isIndefinite,
+      'isIndefinite': isIndefinite,
     };
   }
 }
 
+class _MedicationAvatar extends StatelessWidget {
+  final String? imageUrl;
+  final bool isEnded;
+  const _MedicationAvatar({required this.imageUrl, this.isEnded = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final double imageWidth = AppResponsive.getImageSize(context);
+    final double imageHeight = imageWidth * 0.7; // 직사각형: 높이를 너비의 70%로
+    final double iconSize = AppResponsive.getIconSize(context, imageWidth);
+    final double borderRadius = AppSizes.radiusSm;
+    
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      final Color accent = isEnded ? AppColors.error : AppColors.primary;
+      return Container(
+        width: imageWidth,
+        height: imageHeight,
+        decoration: BoxDecoration(
+          color: accent.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        child: Icon(
+          Icons.medication,
+          color: accent,
+          size: iconSize,
+        ),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Image.network(
+        imageUrl!,
+        width: imageWidth,
+        height: imageHeight,
+        fit: BoxFit.contain,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            width: imageWidth,
+            height: imageHeight,
+            color: (isEnded ? AppColors.error : AppColors.primary).withOpacity(0.1),
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                    : null,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) {
+          final Color accent = isEnded ? AppColors.error : AppColors.primary;
+          return Container(
+            width: imageWidth,
+            height: imageHeight,
+            color: accent.withOpacity(0.1),
+            child: Icon(
+              Icons.medication,
+              color: accent,
+              size: iconSize,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _DisposalTab extends StatelessWidget {
-  const _DisposalTab();
+  final VoidCallback? onNavigateToHome;
+  
+  const _DisposalTab({this.onNavigateToHome});
 
   @override
   Widget build(BuildContext context) {
@@ -963,7 +1357,7 @@ class _DisposalTab extends StatelessWidget {
             ),
           ),
         ),
-        body: const DisposalScreen(),
+        body: DisposalScreen(onNavigateToHome: onNavigateToHome),
       ),
     );
   }
@@ -971,8 +1365,9 @@ class _DisposalTab extends StatelessWidget {
 
 class _PharmacyTab extends StatefulWidget {
   final GlobalKey<MedicationBoxScreenState>? medicationBoxScreenKey;
+  final VoidCallback? onLockStatusChanged;
   
-  const _PharmacyTab({this.medicationBoxScreenKey});
+  const _PharmacyTab({this.medicationBoxScreenKey, this.onLockStatusChanged});
 
   @override
   State<_PharmacyTab> createState() => _PharmacyTabState();
@@ -992,7 +1387,10 @@ class _PharmacyTabState extends State<_PharmacyTab> {
             scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
           ),
-          body: MedicationBoxScreen(key: widget.medicationBoxScreenKey),
+          body: MedicationBoxScreen(
+            key: widget.medicationBoxScreenKey,
+            onLockStatusChanged: widget.onLockStatusChanged,
+          ),
         ),
       ],
     );
@@ -1113,6 +1511,7 @@ class _MedicationItemState extends State<_MedicationItem> {
                       ),
                       backgroundColor: AppColors.warning,
                       duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.fixed,
                     ),
                   );
                   return;
@@ -1133,6 +1532,7 @@ class _MedicationItemState extends State<_MedicationItem> {
                       ? AppColors.success
                       : AppColors.warning,
                   duration: const Duration(seconds: 1),
+                  behavior: SnackBarBehavior.fixed,
                 ),
               );
 

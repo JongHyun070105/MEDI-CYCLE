@@ -45,6 +45,7 @@ class _MedicationRegistrationScreenState
   // 약 상세 정보
   String _selectedDrugManufacturer = '-';
   String _selectedDrugIngredient = '-';
+  String? _selectedDrugImageUrl;
 
   // 약 서비스 인스턴스
   final MedicationService _medicationService = MedicationService();
@@ -145,6 +146,7 @@ class _MedicationRegistrationScreenState
           setState(() {
             _selectedDrugManufacturer = parts.isNotEmpty ? parts[0] : '-';
             _selectedDrugIngredient = parts.length > 1 ? parts[1] : '-';
+            _selectedDrugImageUrl = parts.length > 2 && parts[2].isNotEmpty ? parts[2] : null;
           });
         },
       ),
@@ -435,6 +437,7 @@ class _MedicationRegistrationScreenState
             content: Text('동일한 약과 복용 시간대로 이미 등록된 약이 있습니다.'),
             backgroundColor: AppColors.error,
             duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.fixed,
           ),
         );
         
@@ -560,6 +563,7 @@ class _MedicationRegistrationScreenState
                 const SnackBar(
                   content: Text('약 정보가 업데이트되었습니다!'),
                   backgroundColor: AppColors.primary,
+                  behavior: SnackBarBehavior.fixed,
                 ),
               );
 
@@ -596,6 +600,7 @@ class _MedicationRegistrationScreenState
                 const SnackBar(
                   content: Text('약 업데이트에 실패했습니다. 새로 등록합니다.'),
                   backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.fixed,
                 ),
               );
             }
@@ -631,6 +636,7 @@ class _MedicationRegistrationScreenState
         isIndefinite: _isIndefinite,
         manufacturer: _selectedDrugManufacturer,
         ingredient: _selectedDrugIngredient,
+        itemImageUrl: _selectedDrugImageUrl,
       );
 
       // 서버에 약 등록 요청
@@ -662,6 +668,7 @@ class _MedicationRegistrationScreenState
           const SnackBar(
             content: Text('약 등록이 완료되었습니다!'),
             backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
 
@@ -687,6 +694,7 @@ class _MedicationRegistrationScreenState
           SnackBar(
             content: Text(e is ApiException ? e.message : '약 등록 중 오류가 발생했습니다.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
       }

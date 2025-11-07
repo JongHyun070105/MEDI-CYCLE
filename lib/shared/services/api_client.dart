@@ -4,7 +4,7 @@ import 'navigation_service.dart';
 
 const String baseUrl = String.fromEnvironment(
   'BACKEND_URL',
-  defaultValue: 'https://complexity-into-trackback-hired.trycloudflare.com',
+  defaultValue: 'https://cult-physically-fire-pink.trycloudflare.com',
 );
 
 class ApiClient {
@@ -474,6 +474,28 @@ class ApiClient {
       return response.data;
     } catch (e) {
       rethrow;
+    }
+  }
+
+  // 유효기간 임박/만료 조회
+  Future<Map<String, dynamic>> getExpiryStatus({int windowDays = 30}) async {
+    try {
+      final response = await dio.get(
+        '/api/medications/expiry/list',
+        queryParameters: {'window': windowDays},
+      );
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // 유효기간 정보 수동 업데이트 트리거
+  Future<void> triggerExpiryCheck() async {
+    try {
+      await dio.post('/api/medications/expiry/check');
+    } catch (e) {
+      // ignore
     }
   }
 

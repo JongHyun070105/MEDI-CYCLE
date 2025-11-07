@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_responsive.dart';
 
 class RegistrationStepContent extends StatelessWidget {
   final int step;
@@ -22,9 +23,9 @@ class RegistrationStepContent extends StatelessWidget {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.only(
-        left: AppSizes.md,
-        right: AppSizes.md,
-        top: AppSizes.md,
+        left: AppResponsive.getCardPadding(context),
+        right: AppResponsive.getCardPadding(context),
+        top: AppResponsive.getCardPadding(context),
         bottom: AppSizes.xl + 100, // 하단 여백 추가 (FAB 높이 고려)
       ),
       child: Column(
@@ -33,14 +34,19 @@ class RegistrationStepContent extends StatelessWidget {
           // 단계별 아이콘과 제목
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(_getStepIcon(step), color: Colors.white, size: 20),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double iconSize = (MediaQuery.of(context).size.width * 0.1).clamp(36.0, 48.0);
+                  return Container(
+                    width: iconSize,
+                    height: iconSize,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(iconSize / 2),
+                    ),
+                    child: Icon(_getStepIcon(step), color: Colors.white, size: iconSize * 0.5),
+                  );
+                },
               ),
               const SizedBox(width: AppSizes.md),
               Expanded(

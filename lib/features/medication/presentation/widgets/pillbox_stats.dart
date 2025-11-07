@@ -17,7 +17,8 @@ class PillboxStatsState extends State<PillboxStats> {
   bool _isConnected = false;
   bool _hasMedication = false;
   bool _isLoading = true;
-  bool _isLocked = true; // 더미데이터: 잠금 상태
+  bool _isLocked = false; // 초기값을 false로 변경 (연결 전까지는 해제 상태)
+  bool _forcedByExpiry = false;
 
   @override
   void initState() {
@@ -42,6 +43,9 @@ class PillboxStatsState extends State<PillboxStats> {
       setState(() {
         _isConnected = isConnected;
         _hasMedication = status?.hasMedication ?? false;
+        // 연결되지 않았거나 status가 null이면 잠금 해제 상태
+        _isLocked = (isConnected && status != null) ? status.isLocked : false;
+        _forcedByExpiry = (isConnected && status != null) ? status.forcedByExpiry : false;
         _isLoading = false;
       });
     } catch (e) {
@@ -50,6 +54,8 @@ class PillboxStatsState extends State<PillboxStats> {
       setState(() {
         _isConnected = false;
         _hasMedication = false;
+        _isLocked = false; // 연결 실패 시 잠금 해제된 것으로 간주
+        _forcedByExpiry = false;
         _isLoading = false;
       });
     }
@@ -106,17 +112,43 @@ class PillboxStatsState extends State<PillboxStats> {
           ),
         ),
         const SizedBox(width: AppSizes.sm),
-        // 잠금 상태 카드 (더미데이터)
+        // 잠금 상태 카드
         Expanded(
           child: _buildStatusCard(
-            icon: _isLocked ? Icons.lock : Icons.lock_open,
-            iconColor: _isLocked ? AppColors.error : AppColors.success,
-            backgroundColor: _isLocked
-                ? AppColors.error.withOpacity(0.1)
-                : AppColors.success.withOpacity(0.1),
+            icon: _isLoading
+                ? Icons.lock_clock
+                : (_isLocked ? Icons.lock : Icons.lock_open),
+            iconColor: _isLoading
+                ? AppColors.textSecondary
+                : (_forcedByExpiry
+                    ? AppColors.error
+                    : (!_isConnected
+                        ? AppColors.error
+                        : (_isLocked ? AppColors.success : AppColors.error))),
+            backgroundColor: _isLoading
+                ? AppColors.textSecondary.withOpacity(0.1)
+                : (_forcedByExpiry
+                    ? AppColors.error.withOpacity(0.12)
+                    : (!_isConnected
+                        ? AppColors.error.withOpacity(0.12)
+                        : (_isLocked
+                            ? AppColors.success.withOpacity(0.12)
+                            : AppColors.error.withOpacity(0.12)))),
             title: '잠금 상태',
-            status: _isLocked ? '잠김' : '열림',
-            statusColor: _isLocked ? AppColors.error : AppColors.success,
+            status: _isLoading
+                ? '확인 중...'
+                : (_forcedByExpiry
+                    ? '강제 잠금 (유통기한)'
+                    : (!_isConnected
+                        ? '잠금 해제됨'
+                        : (_isLocked ? '잠김' : '열림'))),
+            statusColor: _isLoading
+                ? AppColors.textSecondary
+                : (_forcedByExpiry
+                    ? AppColors.error
+                    : (!_isConnected
+                        ? AppColors.error
+                        : (_isLocked ? AppColors.success : AppColors.error))),
           ),
         ),
       ],
@@ -141,18 +173,23 @@ class PillboxStatsState extends State<PillboxStats> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-            ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 24,
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double iconSize = (MediaQuery.of(context).size.width * 0.12).clamp(40.0, 56.0);
+              return Container(
+                width: iconSize,
+                height: iconSize,
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: iconSize * 0.5,
+                ),
+              );
+            },
           ),
           const SizedBox(height: AppSizes.sm),
           Text(

@@ -65,6 +65,190 @@ class NotificationService {
     debugPrint('🔔 알림 서비스 초기화 완료');
   }
 
+  // 유효기간 알림 스케줄링 (임박: 30/14/7일 전, 만료 당일: 09:00/12:00/21:00)
+  Future<void> scheduleExpiryAlertsForUser() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+
+    try {
+      final api = ApiClient();
+      // 서버로부터 최신 유효기간 정보 갱신 시도 (비동기)
+      await api.triggerExpiryCheck();
+
+      final data = await api.getExpiryStatus(windowDays: 30);
+      final List<dynamic> imminent = (data['imminent'] as List?) ?? const [];
+      final List<dynamic> expired = (data['expired'] as List?) ?? const [];
+
+      // 임박 알림: 30/14/7일 전 오전 9시
+      for (final it in imminent) {
+        final String name = (it['drug_name'] ?? '').toString();
+        final String? expiryStr = it['expiry_date']?.toString();
+        if (expiryStr == null || expiryStr.isEmpty) continue;
+        final DateTime expiry = DateTime.tryParse(expiryStr) ?? DateTime.now();
+
+        await _scheduleSingleExpiryAlert(
+          name,
+          expiry.subtract(const Duration(days: 30)),
+          '유통기한 30일 전',
+          '약 "$name" 유효기간이 30일 남았습니다. 보관상태와 복용 계획을 확인하세요.',
+        );
+        await _scheduleSingleExpiryAlert(
+          name,
+          expiry.subtract(const Duration(days: 14)),
+          '유통기한 14일 전',
+          '약 "$name" 유효기간이 14일 남았습니다. 필요 시 재처방 혹은 폐기준비를 해주세요.',
+        );
+        await _scheduleSingleExpiryAlert(
+          name,
+          expiry.subtract(const Duration(days: 7)),
+          '유통기한 7일 전',
+          '약 "$name" 유효기간이 7일 남았습니다. 사용여부를 최종 점검하세요.',
+        );
+      }
+
+      // 만료 당일: 09:00, 12:00, 21:00
+      for (final it in [...imminent, ...expired]) {
+        final String name = (it['drug_name'] ?? '').toString();
+        final String? expiryStr = it['expiry_date']?.toString();
+        if (expiryStr == null || expiryStr.isEmpty) continue;
+        final DateTime expiry = DateTime.tryParse(expiryStr) ?? DateTime.now();
+
+        await _scheduleOnDay(
+          name,
+          expiry,
+          9,
+          0,
+          '유효기간 만료일',
+          '오늘 "$name" 유효기간이 만료됩니다. 가까운 약국·병원에 폐의약품 반납을 권장합니다.',
+        );
+        await _scheduleOnDay(
+          name,
+          expiry,
+          12,
+          0,
+          '유효기간 만료 알림',
+          '"$name" 오늘 만료입니다. 반납이 어려우시면 수거 요청을 고려해 주세요.',
+        );
+        await _scheduleOnDay(
+          name,
+          expiry,
+          21,
+          0,
+          '유효기간 만료 최종 안내',
+          '"$name" 만료되었습니다. 보관하지 말고 안전하게 반납해 주세요.',
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ 유효기간 알림 스케줄링 실패: $e');
+    }
+  }
+
+  Future<void> _scheduleSingleExpiryAlert(
+    String drugName,
+    DateTime when,
+    String title,
+    String body,
+  ) async {
+    final DateTime now = DateTime.now();
+    // 과거는 스킵
+    if (when.isBefore(now)) return;
+
+    final int id = _hashId('exp-$drugName-$title-${when.toIso8601String()}');
+    final tz.TZDateTime base = tz.TZDateTime.from(when, tz.local);
+    final tz.TZDateTime t = tz.TZDateTime(
+      tz.local,
+      base.year,
+      base.month,
+      base.day,
+      9,
+      0,
+      0,
+    );
+    await _notifications.zonedSchedule(
+      id,
+      '🔔 $title',
+      body,
+      t,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'medication_expiry',
+          '약 유효기간 알림',
+          channelDescription: '약 유효기간 임박/만료 알림 채널',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: null,
+      payload: 'expiry|$drugName|$title',
+    );
+  }
+
+  Future<void> _scheduleOnDay(
+    String drugName,
+    DateTime day,
+    int hour,
+    int minute,
+    String title,
+    String body,
+  ) async {
+    final tz.TZDateTime t = tz.TZDateTime.from(
+      DateTime(day.year, day.month, day.day, hour, minute),
+      tz.local,
+    );
+    if (t.isBefore(tz.TZDateTime.now(tz.local))) return;
+    final int id = _hashId(
+      'expday-$drugName-$hour:$minute-${day.toIso8601String()}',
+    );
+    await _notifications.zonedSchedule(
+      id,
+      '📌 $title',
+      body,
+      t,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'medication_expiry',
+          '약 유효기간 알림',
+          channelDescription: '약 유효기간 임박/만료 알림 채널',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: null,
+      payload: 'expiryday|$drugName',
+    );
+  }
+
+  int _hashId(String s) {
+    // 간단한 해시 → 알림 ID로 사용
+    int hash = 0;
+    for (int i = 0; i < s.length; i++) {
+      hash = 0x1fffffff & (hash + s.codeUnitAt(i));
+      hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
+      hash ^= (hash >> 6);
+    }
+    hash = 0x1fffffff & (hash + ((0x03ffffff & hash) << 3));
+    hash ^= (hash >> 11);
+    hash = 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
+    return hash.abs();
+  }
+
   /// iOS 알림 권한 요청 (초기화 시 자동으로 요청됨)
   Future<bool?> _requestIOSPermissions() async {
     if (!Platform.isIOS) {

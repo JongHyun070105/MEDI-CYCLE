@@ -56,7 +56,7 @@ export const getMonthlyAdherence = async (req: Request, res: Response) => {
     result.rows.forEach((row, index) => {
       console.log(`   ${index + 1}. ${row.month}: 계획 ${row.planned}회, 완료 ${row.completed}회, 복용률 ${row.adherence_pct}%`);
     });
-    
+
     return res.json({ months: result.rows });
   } catch (error) {
     console.error("Get monthly adherence error:", error);

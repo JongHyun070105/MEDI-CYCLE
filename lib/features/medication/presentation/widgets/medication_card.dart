@@ -38,18 +38,23 @@ class MedicationCard extends StatelessWidget {
           child: Row(
             children: [
               // 약물 아이콘
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isTaken ? AppColors.successLight : AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                ),
-                child: Icon(
-                  isTaken ? Icons.check : Icons.medication,
-                  color: isTaken ? AppColors.success : AppColors.primary,
-                  size: AppSizes.iconLg,
-                ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final double iconSize = (MediaQuery.of(context).size.width * 0.12).clamp(40.0, 56.0);
+                  return Container(
+                    width: iconSize,
+                    height: iconSize,
+                    decoration: BoxDecoration(
+                      color: isTaken ? AppColors.successLight : AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                    ),
+                    child: Icon(
+                      isTaken ? Icons.check : Icons.medication,
+                      color: isTaken ? AppColors.success : AppColors.primary,
+                      size: iconSize * 0.5,
+                    ),
+                  );
+                },
               ),
               
               const SizedBox(width: AppSizes.md),

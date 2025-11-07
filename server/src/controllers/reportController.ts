@@ -52,10 +52,14 @@ export const generateReport = async (req: Request, res: Response) => {
        plans AS (
          SELECT dd::date AS d, COALESCE(array_length(m.dosage_times,1),0) AS planned
          FROM medications m
-         JOIN LATERAL generate_series($2::date, $3::date, interval '1 day') dd ON TRUE
+         JOIN LATERAL generate_series(
+           GREATEST(m.start_date::date, $2::date),
+           LEAST(COALESCE(m.end_date::date, $3::date), $3::date),
+           interval '1 day'
+         ) dd ON TRUE
          WHERE m.user_id = $1
-           AND dd::date >= m.start_date::date
-           AND (m.end_date IS NULL OR dd::date <= m.end_date::date)
+           AND m.start_date::date <= $3::date
+           AND COALESCE(m.end_date::date, $3::date) >= $2::date
        ),
        takes AS (
          SELECT date_trunc('day', mi.intake_time)::date AS d,
@@ -74,16 +78,22 @@ export const generateReport = async (req: Request, res: Response) => {
     );
     const insightRows = insightsRes.rows;
     // 숫자로 명시적 변환하여 포맷팅 문제 방지
-    const totalPlanned = insightRows.reduce(
-      (a, r: any) => a + Number(r.planned || 0),
-      0
-    );
-    const totalCompleted = insightRows.reduce(
-      (a, r: any) => a + Number(r.completed || 0),
-      0
-    );
+    const totalPlanned = insightRows.reduce((a, r: any) => {
+      const planned = Number(r.planned) || 0;
+      return a + (isFinite(planned) ? planned : 0);
+    }, 0);
+    const totalCompleted = insightRows.reduce((a, r: any) => {
+      const completed = Number(r.completed) || 0;
+      return a + (isFinite(completed) ? completed : 0);
+    }, 0);
     const overallPct90 =
       totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
+
+    // 디버깅 로그
+    console.log(`📄 리포트 인사이트 계산 (사용자 ${userId}):`);
+    console.log(`   총 계획: ${totalPlanned}회`);
+    console.log(`   총 완료: ${totalCompleted}회`);
+    console.log(`   복용률: ${overallPct90}%`);
 
     // 숫자 포맷팅 함수 (천 단위 구분자)
     const formatNumber = (num: number): string => {

@@ -49,7 +49,6 @@ class Step5SummaryWidget extends StatelessWidget {
           items: [
             '약품명: ${drugName.isEmpty ? '사용자 입력 약' : drugName}',
             '제조사: $manufacturer',
-            '성분: $ingredient',
           ],
         ),
 

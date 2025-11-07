@@ -11,12 +11,55 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../shared/services/kakao_places_service.dart';
 
 class DisposalScreen extends StatelessWidget {
-  const DisposalScreen({super.key});
+  final VoidCallback? onNavigateToHome;
+
+  const DisposalScreen({super.key, this.onNavigateToHome});
 
   @override
   Widget build(BuildContext context) {
-    return const TabBarView(
-      children: [_NearbyDisposalTab(), _PickupRequestTab()],
+    final TabController? tabController = DefaultTabController.maybeOf(context);
+    if (tabController == null) {
+      // TabController가 없으면 (모달에서 직접 호출된 경우) DefaultTabController로 감싸기
+      return DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('폐의약품 처리'),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: TabBar(
+                indicatorColor: AppColors.primary,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.textSecondary,
+                labelStyle: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+                tabs: const [
+                  Tab(text: '가까운 수거함'),
+                  Tab(text: '방문 수거 신청'),
+                ],
+              ),
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              const _NearbyDisposalTab(),
+              _PickupRequestTab(onNavigateToHome: onNavigateToHome),
+            ],
+          ),
+        ),
+      );
+    }
+    // TabController가 있으면 (탭 내부에서 호출된 경우) TabBarView만 반환
+    return TabBarView(
+      children: [
+        const _NearbyDisposalTab(),
+        _PickupRequestTab(onNavigateToHome: onNavigateToHome),
+      ],
     );
   }
 }
@@ -428,54 +471,77 @@ class _NearbyDisposalTabState extends State<_NearbyDisposalTab> {
       builder: (context) {
         return AlertDialog(
           title: Text('${place.name} 길 안내'),
-          content: const Text('카카오맵에서 길 안내를 시작할까요?'),
-          actionsAlignment: MainAxisAlignment.spaceBetween,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                if (_pos == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('위치 정보를 가져올 수 없습니다.'),
-                      backgroundColor: Colors.red,
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('카카오맵에서 길 안내를 시작할까요?'),
+              const SizedBox(height: AppSizes.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.primary),
+                        foregroundColor: AppColors.primary,
+                      ),
+                      child: const Text('취소'),
                     ),
-                  );
-                  return;
-                }
-                final double spLat = _pos!.latitude;
-                final double spLng = _pos!.longitude;
-                final String appUrl =
-                    'kakaomap://route?sp=$spLat,$spLng&ep=${place.y},${place.x}&by=FOOT';
-                final String webUrl =
-                    'https://map.kakao.com/link/to/${Uri.encodeComponent(place.name)},${place.y},${place.x}';
-                final Uri appUri = Uri.parse(appUrl);
-                final Uri webUri = Uri.parse(webUrl);
-                try {
-                  if (await canLaunchUrl(appUri)) {
-                    await launchUrl(appUri);
-                  } else {
-                    await launchUrl(
-                      webUri,
-                      mode: LaunchMode.externalApplication,
-                    );
-                  }
-                } catch (_) {
-                  await launchUrl(webUri, mode: LaunchMode.externalApplication);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                splashFactory: NoSplash.splashFactory,
+                  ),
+                  const SizedBox(width: AppSizes.sm),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        if (_pos == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('위치 정보를 가져올 수 없습니다.'),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.fixed,
+                            ),
+                          );
+                          return;
+                        }
+                        final double spLat = _pos!.latitude;
+                        final double spLng = _pos!.longitude;
+                        final String appUrl =
+                            'kakaomap://route?sp=$spLat,$spLng&ep=${place.y},${place.x}&by=FOOT';
+                        final String webUrl =
+                            'https://map.kakao.com/link/to/${Uri.encodeComponent(place.name)},${place.y},${place.x}';
+                        final Uri appUri = Uri.parse(appUrl);
+                        final Uri webUri = Uri.parse(webUrl);
+                        try {
+                          if (await canLaunchUrl(appUri)) {
+                            await launchUrl(appUri);
+                          } else {
+                            await launchUrl(
+                              webUri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        } catch (_) {
+                          await launchUrl(
+                            webUri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        splashFactory: NoSplash.splashFactory,
+                      ),
+                      child: const Text('확인'),
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('확인'),
-            ),
-          ],
+              const SizedBox(height: AppSizes.md),
+            ],
+          ),
         );
       },
     );
@@ -503,7 +569,9 @@ class _PlaceView {
 }
 
 class _PickupRequestTab extends StatefulWidget {
-  const _PickupRequestTab();
+  final VoidCallback? onNavigateToHome;
+
+  const _PickupRequestTab({super.key, this.onNavigateToHome});
 
   @override
   State<_PickupRequestTab> createState() => _PickupRequestTabState();
@@ -513,7 +581,6 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   DateTime? _selectedDate;
-  String _selectedTime = '오전';
   TimeOfDay? _selectedTimeOfDay;
 
   @override
@@ -535,14 +602,63 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '방문 수거 신청',
-            style: AppTextStyles.h5.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
+          Container(
+            padding: const EdgeInsets.all(AppSizes.lg),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withOpacity(0.1),
+                  AppColors.primary.withOpacity(0.05),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+              border: Border.all(
+                color: AppColors.primary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppSizes.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                  ),
+                  child: const Icon(
+                    Icons.local_shipping,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: AppSizes.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '방문 수거 신청',
+                        style: AppTextStyles.h6.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: AppSizes.xs),
+                      Text(
+                        '편리하게 방문 수거를 신청하세요',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: AppSizes.lg),
+          const SizedBox(height: AppSizes.xl),
 
           // 신청자 정보
           _buildEditableInputField('연락처', _phoneController, '010-1234-5678'),
@@ -564,18 +680,16 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: AppSizes.lg),
+                padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
                 splashFactory: NoSplash.splashFactory,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppSizes.radiusLg),
                 ),
+                elevation: 2,
               ),
-              child: Text(
+              child: const Text(
                 '수거 신청하기',
-                style: AppTextStyles.h6.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -592,12 +706,18 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            Icon(Icons.phone_android, size: 18, color: AppColors.primary),
+            const SizedBox(width: AppSizes.xs),
+            Text(
+              label,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSizes.sm),
         TextField(
@@ -611,7 +731,7 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
               color: AppColors.textSecondary,
             ),
             filled: true,
-            fillColor: AppColors.borderLight,
+            fillColor: Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               borderSide: const BorderSide(color: AppColors.border),
@@ -624,7 +744,10 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
-            contentPadding: const EdgeInsets.all(AppSizes.md),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSizes.md,
+              vertical: AppSizes.md,
+            ),
           ),
           keyboardType: label == '연락처'
               ? TextInputType.phone
@@ -650,12 +773,18 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '수거 희망일',
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          children: [
+            Icon(Icons.event, size: 18, color: AppColors.primary),
+            const SizedBox(width: AppSizes.xs),
+            Text(
+              '수거 희망일',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSizes.sm),
         GestureDetector(
@@ -664,15 +793,18 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
             width: double.infinity,
             padding: const EdgeInsets.all(AppSizes.md),
             decoration: BoxDecoration(
-              color: AppColors.borderLight,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               border: Border.all(color: AppColors.border),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.calendar_today,
-                  color: AppColors.textSecondary,
+                  color: _selectedDate != null
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                  size: 20,
                 ),
                 const SizedBox(width: AppSizes.sm),
                 Text(
@@ -697,86 +829,53 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '수거 희망 시간',
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: AppSizes.sm),
         Row(
           children: [
-            // 오전/오후 선택
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedTime = _selectedTime == '오전' ? '오후' : '오전';
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(AppSizes.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: AppSizes.sm),
-                      Text(
-                        _selectedTime,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSizes.md),
-            // 시간 선택
-            Expanded(
-              child: GestureDetector(
-                onTap: _selectTime,
-                child: Container(
-                  padding: const EdgeInsets.all(AppSizes.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.schedule,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: AppSizes.sm),
-                      Text(
-                        _selectedTimeOfDay != null
-                            ? '${_selectedTimeOfDay!.hour.toString().padLeft(2, '0')}:${_selectedTimeOfDay!.minute.toString().padLeft(2, '0')}'
-                            : '시간 선택',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: _selectedTimeOfDay != null
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+            Icon(Icons.schedule, size: 18, color: AppColors.primary),
+            const SizedBox(width: AppSizes.xs),
+            Text(
+              '수거 희망 시간',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: AppSizes.sm),
+        GestureDetector(
+          onTap: _selectTime,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSizes.md),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.access_time,
+                  color: _selectedTimeOfDay != null
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                  size: 20,
+                ),
+                const SizedBox(width: AppSizes.sm),
+                Text(
+                  _selectedTimeOfDay != null
+                      ? '${_selectedTimeOfDay!.hour.toString().padLeft(2, '0')}:${_selectedTimeOfDay!.minute.toString().padLeft(2, '0')}'
+                      : '시간을 선택하세요',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: _selectedTimeOfDay != null
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -896,7 +995,7 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
                     child: CupertinoDatePicker(
                       initialDateTime: selectedDateTime,
                       mode: CupertinoDatePickerMode.time,
-                      use24hFormat: false,
+                      use24hFormat: true,
                       onDateTimeChanged: (DateTime newDateTime) {
                         tempDateTime = newDateTime;
                       },
@@ -930,21 +1029,36 @@ class _PickupRequestTabState extends State<_PickupRequestTab> {
   }
 
   void _submitRequest() {
-    if (_phoneController.text.isEmpty || _selectedDate == null) {
+    if (_phoneController.text.isEmpty ||
+        _selectedDate == null ||
+        _selectedTimeOfDay == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('모든 필드를 입력해주세요'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.fixed,
         ),
       );
       return;
     }
 
+    // 입력 내용 초기화
+    setState(() {
+      _phoneController.clear();
+      _selectedDate = null;
+      _selectedTimeOfDay = null;
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('수거 신청이 완료되었습니다'),
         backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.fixed,
+        duration: Duration(seconds: 2),
       ),
     );
+
+    // 홈 화면으로 이동
+    widget.onNavigateToHome?.call();
   }
 }

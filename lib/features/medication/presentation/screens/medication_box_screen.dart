@@ -4,9 +4,12 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../shared/services/rpi_pillbox_service.dart';
+import '../widgets/expired_medication_lock_modal.dart';
 
 class MedicationBoxScreen extends StatefulWidget {
-  const MedicationBoxScreen({super.key});
+  final VoidCallback? onLockStatusChanged;
+  
+  const MedicationBoxScreen({super.key, this.onLockStatusChanged});
 
   @override
   State<MedicationBoxScreen> createState() => MedicationBoxScreenState();
@@ -17,7 +20,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
   bool _isConnected = false;
   bool _isLoading = true;
   bool _hasMedication = false;
-  bool _isLocked = true; // 더미데이터: 잠금 상태
+  bool _isLocked = false; // 초기값을 false로 변경 (연결 전까지는 해제 상태)
+  bool _forcedByExpiry = false; // 유통기한 강제잠금 여부
   DateTime? _lastSeenDateTime;
   List<RpiPillboxLog> _recentLogs = [];
 
@@ -47,7 +51,7 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
   /// 외부에서 새로고침 호출 가능
   void refresh() {
     // 로딩 중이어도 강제로 새로고침 시작 (버튼이 비활성화된 상태 해결)
-    _loadStatus();
+      _loadStatus();
   }
   
   
@@ -197,14 +201,19 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double iconSize = (MediaQuery.of(context).size.width * 0.1).clamp(36.0, 48.0);
+              return Container(
+                width: iconSize,
+                height: iconSize,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                ),
+                child: Icon(icon, color: color, size: iconSize * 0.5),
+              );
+            },
           ),
           const SizedBox(width: AppSizes.md),
           Expanded(
@@ -261,27 +270,80 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
               child: OutlinedButton.icon(
                 onPressed: _isLoading
                     ? null
-                    : () {
-                        // 더미: 잠금/잠금 해제 기능
+                    : () async {
+                        if (_forcedByExpiry && !_isLocked) {
+                          // 이미 해제 상태면 통과
+                        }
+                        if (_forcedByExpiry && _isLocked) {
+                          // 강제잠금: 확인 모달 → 강제잠금 해제 → 해제 시도
+                          if (!mounted) return;
+                          await showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => ExpiredMedicationLockModal(
+                              onConfirmed: () async {
+                                try {
+                                  await _rpiService.setExpiryForceLock(false);
+                                } catch (_) {}
+                              },
+                            ),
+                          );
+                          // 모달 이후 강제잠금 해제되었을 가능성: 계속 진행하여 해제 시도
+                        }
+
                         setState(() {
-                          _isLocked = !_isLocked;
+                          _isLoading = true;
                         });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(_isLocked
-                                ? '약상자가 잠겼습니다'
-                                : '약상자 잠금이 해제되었습니다'),
-                            backgroundColor: _isLocked
-                                ? AppColors.success
-                                : AppColors.error,
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
+                        try {
+                          bool ok = false;
+                          if (_isLocked) {
+                            ok = await _rpiService.unlock();
+                          } else {
+                            ok = await _rpiService.lock();
+                          }
+                          // ignore: unused_local_variable
+                          final bool _ = ok;
+                          // 상태 재조회
+                          final status = await _rpiService.getStatus()
+                              .timeout(const Duration(seconds: 3), onTimeout: () => null);
+                          if (!mounted) return;
+                          setState(() {
+                            _isConnected = _isConnected; // 유지
+                            _hasMedication = status?.hasMedication ?? _hasMedication;
+                            _isLocked = status?.isLocked ?? _isLocked;
+                            _forcedByExpiry = status?.forcedByExpiry ?? _forcedByExpiry;
+                            _isLoading = false;
+                          });
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(_isLocked ? '약상자가 잠겼습니다' : '약상자 잠금이 해제되었습니다'),
+                              backgroundColor: _isLocked ? AppColors.success : AppColors.error,
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.fixed,
+                            ),
+                          );
+                          // 메인 화면의 약상자 상태도 업데이트
+                          widget.onLockStatusChanged?.call();
+                        } catch (e) {
+                          if (!mounted) return;
+                          setState(() {
+                            _isLoading = false;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('잠금 제어 중 오류가 발생했습니다'),
+                              backgroundColor: AppColors.error,
+                              duration: Duration(seconds: 2),
+                              behavior: SnackBarBehavior.fixed,
+                            ),
+                          );
+                        }
                       },
                 icon: Icon(_isLocked ? Icons.lock : Icons.lock_open),
                 label: Text(_isLocked ? '잠금 해제' : '잠금'),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(
+              side: BorderSide(
                     color: _isLocked
                         ? AppColors.success
                         : AppColors.error,
@@ -296,17 +358,17 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
             ),
             const SizedBox(width: AppSizes.sm),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isLoading ? null : _refreshStatus,
-                icon: const Icon(Icons.refresh),
-                label: const Text('상태 새로고침'),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primary),
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
-                  splashFactory: NoSplash.splashFactory,
-                ),
-              ),
+          child: OutlinedButton.icon(
+            onPressed: _isLoading ? null : _refreshStatus,
+            icon: const Icon(Icons.refresh),
+            label: const Text('상태 새로고침'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.primary),
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: AppSizes.md),
+              splashFactory: NoSplash.splashFactory,
+            ),
+          ),
             ),
           ],
         ),
@@ -376,14 +438,19 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-            ),
-            child: Icon(icon, color: color, size: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double iconSize = (MediaQuery.of(context).size.width * 0.08).clamp(28.0, 36.0);
+              return Container(
+                width: iconSize,
+                height: iconSize,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                ),
+                child: Icon(icon, color: color, size: iconSize * 0.5),
+              );
+            },
           ),
           const SizedBox(width: AppSizes.md),
           Expanded(
@@ -440,6 +507,9 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       setState(() {
         _isConnected = isConnected;
         _hasMedication = status?.hasMedication ?? false;
+        // 연결되지 않았거나 status가 null이면 잠금 해제 상태
+        _isLocked = (isConnected && status != null) ? status.isLocked : false;
+        _forcedByExpiry = (isConnected && status != null) ? status.forcedByExpiry : false;
         _lastSeenDateTime = status?.lastSeenDateTime;
         _recentLogs = logs;
         _isLoading = false;
@@ -451,6 +521,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       setState(() {
         _isConnected = false;
         _hasMedication = false;
+        _isLocked = false; // 연결 실패 시 잠금 해제된 것으로 간주
+        _forcedByExpiry = false;
         _recentLogs = [];
         _isLoading = false;
         _hasLoadedOnce = true;
@@ -487,6 +559,9 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       setState(() {
         _isConnected = isConnected;
         _hasMedication = status?.hasMedication ?? false;
+        // 연결되지 않았거나 status가 null이면 잠금 해제 상태
+        _isLocked = (isConnected && status != null) ? status.isLocked : false;
+        _forcedByExpiry = (isConnected && status != null) ? status.forcedByExpiry : false;
         _lastSeenDateTime = status?.lastSeenDateTime;
         _recentLogs = logs; // 로그 새로고침
         _isLoading = false;
@@ -501,12 +576,17 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           backgroundColor:
               _isConnected ? AppColors.primary : AppColors.error,
           duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.fixed,
         ),
       );
     } catch (e) {
       debugPrint('약상자 상태 새로고침 실패: $e');
       if (!mounted) return;
       setState(() {
+        _isConnected = false;
+        _hasMedication = false;
+        _isLocked = false; // 연결 실패 시 잠금 해제된 것으로 간주
+        _forcedByExpiry = false;
         _isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -514,6 +594,7 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           content: Text('새로고침 중 오류가 발생했습니다'),
           backgroundColor: AppColors.error,
           duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.fixed,
         ),
       );
     }

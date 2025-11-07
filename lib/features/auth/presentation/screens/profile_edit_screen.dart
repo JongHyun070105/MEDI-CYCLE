@@ -89,6 +89,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
           const SnackBar(
             content: Text('성별을 선택해주세요.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
         return;
@@ -99,6 +100,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
           const SnackBar(
             content: Text('생년월일을 선택해주세요.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
         return;
@@ -109,6 +111,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
           const SnackBar(
             content: Text('주소를 입력해주세요.'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.fixed,
           ),
         );
         return;
@@ -144,13 +147,14 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
             expectedEmail: ref.read(authControllerProvider).user?.email,
           );
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('프로필이 수정되었습니다.'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-          Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('프로필이 수정되었습니다.'),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+        Navigator.of(context).pop();
         }
       } catch (e) {
         if (mounted) {
@@ -174,13 +178,14 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
             }
           }
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
               content: Text(errorMessage),
-              backgroundColor: AppColors.error,
+            backgroundColor: AppColors.error,
               duration: const Duration(seconds: 3),
-            ),
-          );
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
         }
       } finally {
         if (mounted) {

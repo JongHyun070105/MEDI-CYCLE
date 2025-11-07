@@ -8,26 +8,43 @@ export const getHealthInsights = async (req: Request, res: Response) => {
 
     // 최근 90일 계획/완료 집계
     const result = await query(
-      `WITH days AS (
+      `WITH date_range AS (
+         SELECT CURRENT_DATE - interval '90 day' AS start_date,
+                CURRENT_DATE AS end_date
+       ),
+       days AS (
          SELECT dd::date AS d
-         FROM generate_series(CURRENT_DATE - interval '90 day', CURRENT_DATE, interval '1 day') dd
+         FROM generate_series(
+           (SELECT start_date FROM date_range), 
+           (SELECT end_date FROM date_range), 
+           interval '1 day'
+         ) dd
        ),
        plans AS (
          SELECT dd::date AS d, COALESCE(array_length(m.dosage_times,1),0) AS planned
          FROM medications m
-         JOIN LATERAL generate_series(m.start_date::date, COALESCE(m.end_date::date, CURRENT_DATE), interval '1 day') dd ON TRUE
+         CROSS JOIN date_range dr
+         JOIN LATERAL generate_series(
+           GREATEST(m.start_date::date, dr.start_date::date),
+           LEAST(COALESCE(m.end_date::date, dr.end_date::date), dr.end_date::date),
+           interval '1 day'
+         ) dd ON TRUE
          WHERE m.user_id = $1
+           AND m.start_date::date <= dr.end_date::date
+           AND COALESCE(m.end_date::date, dr.end_date::date) >= dr.start_date::date
        ),
        takes AS (
          SELECT date_trunc('day', mi.intake_time)::date AS d,
                 COUNT(*) FILTER (WHERE mi.is_taken = TRUE) AS completed
          FROM medication_intakes mi
          JOIN medications m ON m.id = mi.medication_id AND m.user_id = $1
+         WHERE mi.intake_time >= CURRENT_DATE - interval '90 day'
+           AND mi.intake_time <= CURRENT_DATE
          GROUP BY 1
        )
        SELECT d.d,
-              COALESCE((SELECT SUM(planned) FROM plans p WHERE p.d = d.d),0) AS planned,
-              COALESCE((SELECT completed FROM takes t WHERE t.d = d.d),0) AS completed
+              COALESCE((SELECT SUM(planned)::integer FROM plans p WHERE p.d = d.d),0)::integer AS planned,
+              COALESCE((SELECT completed::integer FROM takes t WHERE t.d = d.d),0)::integer AS completed
        FROM days d
        ORDER BY d.d`,
       [userId]
@@ -38,10 +55,26 @@ export const getHealthInsights = async (req: Request, res: Response) => {
       planned: number;
       completed: number;
     }>;
-    const totalPlanned = rows.reduce((a, r) => a + (r.planned || 0), 0);
-    const totalCompleted = rows.reduce((a, r) => a + (r.completed || 0), 0);
+    
+    // 안전한 숫자 변환 및 합산
+    const totalPlanned = rows.reduce((a, r) => {
+      const planned = Number(r.planned) || 0;
+      return a + (isFinite(planned) ? planned : 0);
+    }, 0);
+    
+    const totalCompleted = rows.reduce((a, r) => {
+      const completed = Number(r.completed) || 0;
+      return a + (isFinite(completed) ? completed : 0);
+    }, 0);
+    
     const overallPct =
       totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 0;
+    
+    // 디버깅 로그
+    console.log(`📊 인사이트 계산 (사용자 ${userId}):`);
+    console.log(`   총 계획: ${totalPlanned}회`);
+    console.log(`   총 완료: ${totalCompleted}회`);
+    console.log(`   복용률: ${overallPct}%`);
 
     // 최근 3개월 월별 추세
     const monthly = await query(
@@ -117,40 +150,26 @@ export const getHealthInsights = async (req: Request, res: Response) => {
 
     const tips: string[] = [];
     
-    // 성실도에 따른 맞춤 권장사항
+    // 성실도에 따른 맞춤 권장사항 (핵심만)
     if (overallPct < 60) {
-      tips.push("📊 복용 패턴 분석: 현재 복용률이 낮은 상태입니다. 어떤 시간대나 요일에 가장 많이 놓치는지 확인하고, 해당 시간대에 약을 미리 준비해 두거나 복용 여부를 체크하는 습관을 만들어 보세요.");
-      tips.push("💊 복약 시간 최적화: 식사와 연계하여 복용하거나 특정 일정(예: 아침 식사 후, 저녁 취침 전)과 결합하면 복약을 놓치는 빈도를 줄일 수 있습니다. 일주일 동안 가장 성공적인 복용 시간대를 찾아 고정해 보세요.");
-      tips.push("📈 목표 설정: 일주일 단위로 복용 목표를 설정하고, 달성 시 작은 보상을 주는 방식으로 동기부여를 높여보세요. 예를 들어 주 5회 이상 달성 시 자신에게 작은 선물을 주는 것도 효과적입니다.");
+      tips.push("📊 복용 패턴 분석: 어떤 시간대에 약을 자주 놓치는지 확인하고, 해당 시간에 알림을 설정하거나 약을 미리 준비해 두세요.");
+      tips.push("💊 복약 시간 개선: 식사 시간이나 취침 전 등 매일 반복되는 일정과 복약 시간을 연결하면 잊지 않고 복용할 수 있습니다.");
     } else if (overallPct < 75) {
-      tips.push("🔄 일관성 유지: 현재 복용률을 유지하면서도 놓치는 경우를 줄이기 위해 복약 시간을 생활 패턴과 더욱 밀접하게 연계시켜 보세요. 특히 주말이나 특별한 일정이 있을 때도 복용 시간을 유지하는 것이 중요합니다.");
-      tips.push("📦 약물 관리: 약을 잘 보이는 곳에 두거나, 휴대용 약통을 활용하여 외출 시에도 약을 놓치지 않도록 준비하세요. 특히 아침에 외출하는 경우 전날 밤에 약통을 준비해 두는 습관을 권장합니다.");
-    } else {
-      tips.push("✅ 우수한 복약 습관: 현재 우수한 복약 습관을 계속 유지하시기 바랍니다. 복용 기록을 꾸준히 남기시면 건강 상태 추이를 더 정확히 파악할 수 있으며, 의료진과의 상담 시에도 유용한 자료가 됩니다.");
+      tips.push("🔄 일관성 유지: 주말이나 외출 시에도 복약 시간을 지킬 수 있도록 휴대용 약통을 준비하세요.");
+      tips.push("📦 약물 관리: 약을 눈에 잘 띄는 곳에 두어 깜빡하지 않도록 하세요.");
+    } else if (overallPct >= 90) {
+      tips.push("✅ 우수한 복약 습관: 현재의 우수한 복약 습관을 계속 유지하시기 바랍니다.");
     }
     
-    // 월별 패턴 분석 기반 권장사항
-    if (months.some((m) => m.pct < 50)) {
-      const lowMonths = months.filter((m) => m.pct < 50);
-      const monthNames = lowMonths.map((m) => {
-        const parts = m.month.split("-");
-        return `${parseInt(parts[1])}월`;
-      }).join(", ");
-      tips.push(`📅 월별 패턴 분석: ${monthNames}에 복용률이 낮았던 것으로 나타났습니다. 해당 기간의 생활 패턴이나 특별한 일정을 확인하고, 다음번에는 미리 대비하는 방법을 고려해 보세요.`);
-    }
-    
-    // 복용률 기반 구체적 권장사항
-    if (totalPlanned > 0) {
-      const missedCount = totalPlanned - totalCompleted;
+    // 복용을 많이 놓친 경우에만 경고
+    if (totalPlanned > 0 && isFinite(totalPlanned) && isFinite(totalCompleted)) {
+      const missedCount = Math.max(0, totalPlanned - totalCompleted);
       const missedPct = Math.round((missedCount / totalPlanned) * 100);
-      if (missedPct > 20) {
-        tips.push(`⚠️ 놓친 복용 관리: 최근 ${missedCount}회의 복용을 놓치셨습니다. 약의 효과를 제대로 발휘하려면 처방대로 꾸준히 복용하는 것이 중요합니다. 복용을 놓쳤을 때는 다음 복용 시간에 두 배를 복용하지 말고, 의사나 약사와 상담하세요.`);
+      
+      if (isFinite(missedCount) && missedCount > 0 && missedCount < 10000 && missedPct > 30) {
+        tips.push(`⚠️ 놓친 복용: 최근 ${missedCount}회를 놓치셨습니다. 복용을 놓쳤을 때는 다음 시간에 두 배로 드시지 말고 의사나 약사와 상담하세요.`);
       }
     }
-    
-    // 공통 권장사항
-    tips.push("🏥 의료진 상담: 약 복용 중 이상 반응이나 부작용이 발생하면 즉시 복용을 중단하고 의사나 약사와 상담하세요. 복약 기록을 의료진에게 보여주면 더 정확한 진단과 치료가 가능합니다.");
-    tips.push("📋 건강 관리: 정기적으로 건강 인사이트를 확인하여 자신의 복약 패턴을 파악하고, 지속적으로 개선해 나가시기 바랍니다. 복약 성실도가 낮을수록 치료 효과가 떨어질 수 있으므로, 꾸준한 관리가 필요합니다.");
 
     return res.json({ overallPct, months, message, tips });
   } catch (error) {

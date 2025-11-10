@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     container_name: medicycle_postgres
     environment:
-      POSTGRES_USER: medicycle
-      POSTGRES_PASSWORD: medicycle_password
-      POSTGRES_DB: medicycle_db
+      POSTGRES_USER: ${DB_USER:-medicycle}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-medicycle_db}
     ports:
       - "5432:5432"
     volumes:
@@ -28,16 +28,16 @@ services:
       PORT: 3000
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: medicycle
-      DB_PASSWORD: medicycle_password
-      DB_NAME: medicycle_db
-      JWT_SECRET: medicycle_jwt_secret_key_change_in_production
-      JWT_EXPIRES_IN: 7d
-      CORS_ORIGIN: "http://localhost:*"
-      GEMINI_API_KEY: AIzaSyAGjs6sVTbLiDWz0ELsUlyCK3BPIHaVSeg
-      EAPIYAK_SERVICE_KEY: dJfT/j5TTe7mvR8DIXbP9SoyhvH+Fx7dS27bsViReXQiQtQPPp6ng7o1jHITVXdW3PRS/20m48MQgaBT9nFecw==
-      CLOUDFLARE_WORKER_URL: https://take-your-medicine-api-proxy-production.how-about-this-api.workers.dev
-      ML_SERVER_URL: http://ml_server:8000
+      DB_USER: ${DB_USER:-medicycle}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-medicycle_db}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:*}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      EAPIYAK_SERVICE_KEY: ${EAPIYAK_SERVICE_KEY}
+      CLOUDFLARE_WORKER_URL: ${CLOUDFLARE_WORKER_URL}
+      ML_SERVER_URL: ${ML_SERVER_URL:-http://ml_server:8000}
     ports:
       - "3000:3000"
     depends_on:

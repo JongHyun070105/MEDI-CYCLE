@@ -25,6 +25,7 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
   final GlobalKey<_AiTabState> _aiTabKey = GlobalKey<_AiTabState>();
   final GlobalKey<_DashboardTabState> _dashboardTabKey = GlobalKey<_DashboardTabState>();
   TabController? _tabController;
+  bool _initialRefreshScheduled = false;
   
   // 외부에서 _aiTabKey 접근 가능하도록 getter 추가
   GlobalKey<_AiTabState> get aiTabKey => _aiTabKey;
@@ -78,6 +79,7 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
             _hasConsent = true;
             _isCheckingConsent = false;
           });
+          _scheduleInitialRefresh();
         }
       } else {
         if (mounted) {
@@ -90,8 +92,18 @@ class AiFeedbackScreenState extends State<AiFeedbackScreen> {
           _hasConsent = true;
           _isCheckingConsent = false;
         });
+        _scheduleInitialRefresh();
       }
     }
+  }
+
+  void _scheduleInitialRefresh() {
+    if (_initialRefreshScheduled) return;
+    _initialRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dashboardTabKey.currentState?.refresh();
+      _aiTabKey.currentState?.refresh();
+    });
   }
 
   Future<bool?> _showConsentDialog(BuildContext context) {

@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../shared/services/rpi_pillbox_service.dart';
+
 class MedicationBoxScreen extends StatefulWidget {
   const MedicationBoxScreen({super.key});
 
@@ -45,22 +46,19 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
   /// 외부에서 새로고침 호출 가능
   void refresh() {
     // 로딩 중이어도 강제로 새로고침 시작 (버튼이 비활성화된 상태 해결)
-      _loadStatus();
+    _loadStatus();
   }
-  
-  
+
   /// 외부에서 로딩 완료 여부 확인 (메인화면에서 사용)
   bool get hasLoadedOnce => _hasLoadedOnce;
-  
+
   /// 외부에서 로딩 상태 확인 (오버레이 표시용)
   bool get isLoading => _isLoading;
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading && !_hasLoadedOnce) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     return SingleChildScrollView(
@@ -129,8 +127,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
           Text(
             _isConnected
                 ? (_lastSeenDateTime != null
-                    ? '마지막 연결: ${_formatLastSeen(_lastSeenDateTime)}'
-                    : '마지막 연결: 확인 중...')
+                      ? '마지막 연결: ${_formatLastSeen(_lastSeenDateTime)}'
+                      : '마지막 연결: 확인 중...')
                 : '연결을 확인해주세요',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
@@ -162,7 +160,9 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         const SizedBox(height: AppSizes.md),
         _buildStatusItem(
           title: '마지막 업데이트',
-          value: _lastSeenDateTime != null ? _formatLastSeen(_lastSeenDateTime) : '알 수 없음',
+          value: _lastSeenDateTime != null
+              ? _formatLastSeen(_lastSeenDateTime)
+              : '알 수 없음',
           icon: Icons.access_time,
           color: AppColors.primary,
         ),
@@ -197,7 +197,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final double iconSize = (MediaQuery.of(context).size.width * 0.1).clamp(36.0, 48.0);
+              final double iconSize = (MediaQuery.of(context).size.width * 0.1)
+                  .clamp(36.0, 48.0);
               return Container(
                 width: iconSize,
                 height: iconSize,
@@ -303,19 +304,21 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
             ),
           )
         else
-          ..._recentLogs.take(10).map((log) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                child: _buildActivityItem(
-                  time: log.timeFormatted,
-                  action: log.hasMedication
-                      ? '약물 감지됨'
-                      : '약물 미감지',
-                  icon: log.hasMedication ? Icons.medication : Icons.cancel,
-                  color: log.hasMedication
-                      ? AppColors.success
-                      : AppColors.textSecondary,
+          ..._recentLogs
+              .take(10)
+              .map(
+                (log) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSizes.sm),
+                  child: _buildActivityItem(
+                    time: log.timeFormatted,
+                    action: log.hasMedication ? '약물 감지됨' : '약물 미감지',
+                    icon: log.hasMedication ? Icons.medication : Icons.cancel,
+                    color: log.hasMedication
+                        ? AppColors.success
+                        : AppColors.textSecondary,
+                  ),
                 ),
-              )),
+              ),
       ],
     );
   }
@@ -337,7 +340,8 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final double iconSize = (MediaQuery.of(context).size.width * 0.08).clamp(28.0, 36.0);
+              final double iconSize = (MediaQuery.of(context).size.width * 0.08)
+                  .clamp(28.0, 36.0);
               return Container(
                 width: iconSize,
                 height: iconSize,
@@ -383,12 +387,20 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
 
     try {
       // 타임아웃을 포함한 상태 조회 (최대 3초)
-      final isConnected = await _rpiService.isConnected()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
-      final status = await _rpiService.getStatus()
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
-      final logs = await _rpiService.getLogs(limit: 20)
-          .timeout(const Duration(seconds: 3), onTimeout: () => <RpiPillboxLog>[]);
+      final isConnected = await _rpiService.isConnected().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => false,
+      );
+      final status = await _rpiService.getStatus().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
+      final logs = await _rpiService
+          .getLogs(limit: 20)
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => <RpiPillboxLog>[],
+          );
 
       if (!mounted) return;
       // 로그를 최신순으로 정렬 (시간 역순)
@@ -400,7 +412,7 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         if (bTime == null) return -1;
         return bTime.compareTo(aTime); // 최신순 (내림차순)
       });
-      
+
       setState(() {
         _isConnected = isConnected;
         _hasMedication = status?.hasMedication ?? false;
@@ -430,12 +442,20 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
 
     try {
       // 상태와 로그를 함께 새로고침 (타임아웃 추가)
-      final isConnected = await _rpiService.isConnected()
-          .timeout(const Duration(seconds: 3), onTimeout: () => false);
-      final status = await _rpiService.getStatus()
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
-      final logs = await _rpiService.getLogs(limit: 20)
-          .timeout(const Duration(seconds: 3), onTimeout: () => <RpiPillboxLog>[]);
+      final isConnected = await _rpiService.isConnected().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => false,
+      );
+      final status = await _rpiService.getStatus().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
+      final logs = await _rpiService
+          .getLogs(limit: 20)
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => <RpiPillboxLog>[],
+          );
 
       if (!mounted) return;
       // 로그를 최신순으로 정렬 (시간 역순)
@@ -457,13 +477,12 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
         SnackBar(
-          content: Text(_isConnected
-              ? '상태와 로그를 새로고침했습니다'
-              : '서버에 연결할 수 없습니다'),
-          backgroundColor:
-              _isConnected ? AppColors.primary : AppColors.error,
+          content: Text(_isConnected ? '상태와 로그를 새로고침했습니다' : '서버에 연결할 수 없습니다'),
+          backgroundColor: _isConnected ? AppColors.primary : AppColors.error,
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.fixed,
         ),
@@ -476,7 +495,9 @@ class MedicationBoxScreenState extends State<MedicationBoxScreen> {
         _hasMedication = false;
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('새로고침 중 오류가 발생했습니다'),
           backgroundColor: AppColors.error,

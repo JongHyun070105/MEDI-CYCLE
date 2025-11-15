@@ -1389,7 +1389,6 @@ class _PharmacyTabState extends State<_PharmacyTab> {
           ),
           body: MedicationBoxScreen(
             key: widget.medicationBoxScreenKey,
-            onLockStatusChanged: widget.onLockStatusChanged,
           ),
         ),
       ],

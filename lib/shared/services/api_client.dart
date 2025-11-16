@@ -4,7 +4,7 @@ import 'navigation_service.dart';
 
 const String baseUrl = String.fromEnvironment(
   'BACKEND_URL',
-  defaultValue: 'https://colleagues-treat-curtis-hiring.trycloudflare.com',
+  defaultValue: 'https://potter-sitting-panels-pins.trycloudflare.com',
 );
 
 class ApiClient {

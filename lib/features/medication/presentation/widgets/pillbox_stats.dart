@@ -17,8 +17,6 @@ class PillboxStatsState extends State<PillboxStats> {
   bool _isConnected = false;
   bool _hasMedication = false;
   bool _isLoading = true;
-  bool _isLocked = false; // 초기값을 false로 변경 (연결 전까지는 해제 상태)
-  bool _forcedByExpiry = false;
 
   @override
   void initState() {
@@ -43,9 +41,6 @@ class PillboxStatsState extends State<PillboxStats> {
       setState(() {
         _isConnected = isConnected;
         _hasMedication = status?.hasMedication ?? false;
-        // 연결되지 않았거나 status가 null이면 잠금 해제 상태
-        _isLocked = (isConnected && status != null) ? status.isLocked : false;
-        _forcedByExpiry = (isConnected && status != null) ? status.forcedByExpiry : false;
         _isLoading = false;
       });
     } catch (e) {
@@ -54,8 +49,6 @@ class PillboxStatsState extends State<PillboxStats> {
       setState(() {
         _isConnected = false;
         _hasMedication = false;
-        _isLocked = false; // 연결 실패 시 잠금 해제된 것으로 간주
-        _forcedByExpiry = false;
         _isLoading = false;
       });
     }
@@ -68,15 +61,15 @@ class PillboxStatsState extends State<PillboxStats> {
         // 연결 상태 카드
         Expanded(
           child: _buildStatusCard(
-            icon: _isLoading 
-                ? Icons.bluetooth_searching 
+            icon: _isLoading
+                ? Icons.bluetooth_searching
                 : (_isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled),
-            iconColor: _isLoading 
-                ? AppColors.textSecondary 
+            iconColor: _isLoading
+                ? AppColors.textSecondary
                 : (_isConnected ? AppColors.success : AppColors.error),
-            backgroundColor: _isLoading 
+            backgroundColor: _isLoading
                 ? AppColors.textSecondary.withOpacity(0.1)
-                : (_isConnected 
+                : (_isConnected
                     ? AppColors.success.withOpacity(0.1)
                     : AppColors.error.withOpacity(0.1)),
             title: '연결 상태',
@@ -91,13 +84,13 @@ class PillboxStatsState extends State<PillboxStats> {
         // 약물 감지 카드
         Expanded(
           child: _buildStatusCard(
-            icon: _isLoading 
-                ? Icons.search 
+            icon: _isLoading
+                ? Icons.search
                 : (_hasMedication ? Icons.check_circle : Icons.cancel),
-            iconColor: _isLoading 
-                ? AppColors.textSecondary 
+            iconColor: _isLoading
+                ? AppColors.textSecondary
                 : (_hasMedication ? AppColors.success : AppColors.error),
-            backgroundColor: _isLoading 
+            backgroundColor: _isLoading
                 ? AppColors.textSecondary.withOpacity(0.1)
                 : (_hasMedication
                     ? AppColors.success.withOpacity(0.1)
@@ -109,46 +102,6 @@ class PillboxStatsState extends State<PillboxStats> {
             statusColor: _isLoading
                 ? AppColors.textSecondary
                 : (_hasMedication ? AppColors.success : AppColors.error),
-          ),
-        ),
-        const SizedBox(width: AppSizes.sm),
-        // 잠금 상태 카드
-        Expanded(
-          child: _buildStatusCard(
-            icon: _isLoading
-                ? Icons.lock_clock
-                : (_isLocked ? Icons.lock : Icons.lock_open),
-            iconColor: _isLoading
-                ? AppColors.textSecondary
-                : (_forcedByExpiry
-                    ? AppColors.error
-                    : (!_isConnected
-                        ? AppColors.error
-                        : (_isLocked ? AppColors.success : AppColors.error))),
-            backgroundColor: _isLoading
-                ? AppColors.textSecondary.withOpacity(0.1)
-                : (_forcedByExpiry
-                    ? AppColors.error.withOpacity(0.12)
-                    : (!_isConnected
-                        ? AppColors.error.withOpacity(0.12)
-                        : (_isLocked
-                            ? AppColors.success.withOpacity(0.12)
-                            : AppColors.error.withOpacity(0.12)))),
-            title: '잠금 상태',
-            status: _isLoading
-                ? '확인 중...'
-                : (_forcedByExpiry
-                    ? '강제 잠금 (유통기한)'
-                    : (!_isConnected
-                        ? '잠금 해제됨'
-                        : (_isLocked ? '잠김' : '열림'))),
-            statusColor: _isLoading
-                ? AppColors.textSecondary
-                : (_forcedByExpiry
-                    ? AppColors.error
-                    : (!_isConnected
-                        ? AppColors.error
-                        : (_isLocked ? AppColors.success : AppColors.error))),
           ),
         ),
       ],

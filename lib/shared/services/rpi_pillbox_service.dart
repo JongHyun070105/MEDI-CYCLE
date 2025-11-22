@@ -102,8 +102,8 @@ class RpiPillboxLog {
 class RpiPillboxService {
   // 라즈베리파이 IP 주소 (같은 핫스팟에서 사용)
   // TODO: 나중에 설정으로 변경 가능하도록
-  static const String _defaultRpiIp = '10.204.134.189';
-  static const int _defaultPort = 8080;
+  static const String _defaultRpiIp = '10.242.64.189';
+  static const int _defaultPort = 8000;
   static const Duration _timeout = Duration(seconds: 5);
 
   String _rpiBaseUrl = 'http://$_defaultRpiIp:$_defaultPort';
@@ -228,4 +228,3 @@ class RpiPillboxService {
 
 // 싱글톤 인스턴스
 final RpiPillboxService rpiPillboxService = RpiPillboxService();
-
